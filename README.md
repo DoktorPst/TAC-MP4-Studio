@@ -17,13 +17,13 @@
 
 ---
 
-## ✦ Aperçu
+## ✦ Accueil
 
 <div align="center">
 
-![TAC MP4 Studio — Interface principale](https://i.imgur.com/WghlJ6F.png)
+![TAC MP4 Studio — Page d'accueil](https://i.imgur.com/cHnKviv.png)
 
-*Interface dark CustomTkinter — waveform interactive, preview live, tout en une fenêtre*
+*Page d'accueil — interface dark CustomTkinter*
 
 </div>
 
@@ -33,29 +33,49 @@ Conçu pour les producteurs, beatmakers et artistes qui veulent un rendu profess
 
 ---
 
-## 🎬 Rendus
+## 🚀 Workflow en 3 étapes
 
 <div align="center">
 
-![Rendu horizontal](https://i.imgur.com/Ffxk8Aw.png)
+![Import musique et pochette](https://i.imgur.com/cRNg6WM.png)
 
-*Format horizontal 1920×1080 — YouTube · SoundCloud · Bandcamp*
+*Étape 1 & 2 — Import audio et pochette · Drag & Drop ou sélection fichier*
 
 </div>
 
+---
+
+## 🖥️ Interface principale
+
 <div align="center">
 
-![Interface éditeur](https://i.imgur.com/Yo1x0k4.png)
+![Interface principale 1920x1080](https://i.imgur.com/w0snPsg.png)
 
-*Éditeur avec waveform cliquable, preview live 16:9 ou 9:16, et panneau de réglages*
+*Éditeur complet — waveform interactive · preview live · 9 styles de spectre · presets 1 clic*
 
 </div>
 
+---
+
+## 📱 Format SHORT vertical
+
 <div align="center">
 
-![Presets visuels](https://i.imgur.com/moRgO9s.png)
+![Rendu SHORT vertical 1080x1920](https://i.imgur.com/w0snPsg.png)
 
-*6 presets globaux — Dark Premium, Neon Club, Reggae Smoke, Chill Lo-Fi, Clean White, Short Vertical*
+*Format 1080×1920 — Milieu automatique du son · Idéal Instagram Reels · TikTok · YouTube Shorts*
+
+</div>
+
+---
+
+## 🚀 Export
+
+<div align="center">
+
+![Panel export](https://i.imgur.com/WldOrGr.png)
+
+*Panel export — CHECK 15s · SHORT 1min vertical · COMPLET son entier*
 
 </div>
 
@@ -87,13 +107,13 @@ Conçu pour les producteurs, beatmakers et artistes qui veulent un rendu profess
 - **Particules** — réactives aux kicks et aux aigus
 - **Pochette** — pulse sur les beats · halo glow · repositionnement automatique en 9:16
 - **Vignette** — masque précalculé par résolution, zéro overhead
-- **Texte** — artiste et titre séparés · tailles différentes · ombre réactive
+- **Texte** — champs Artiste et Titre séparés · tailles différentes · ombre réactive aux kicks
 
 ### 🚀 3 modes d'export
 
 ```
 CHECK   →  15 secondes  ·  1920×1080 horizontal  ·  Aperçu rapide
-SHORT   →  1 minute     ·  1080×1920 vertical    ·  Milieu du son  (Reels · TikTok)
+SHORT   →  1 minute     ·  1080×1920 vertical    ·  Milieu du son  (Reels · TikTok · Shorts)
 COMPLET →  Son entier   ·  1920×1080 horizontal  ·  YouTube · SoundCloud
 ```
 
@@ -105,19 +125,14 @@ COMPLET →  Son entier   ·  1920×1080 horizontal  ·  YouTube · SoundCloud
 
 ### Update 2 — Waveform · Artiste/Titre · Raccourcis clavier
 
-<div align="center">
-
-![Panneau de réglages](https://i.imgur.com/9UAfDY2.png)
-
-</div>
-
 **🎚 Waveform globale cliquable**
-Une barre de forme d'onde apparaît sous la preview dès l'ouverture de l'éditeur. Elle représente la totalité du son, avec la zone preview surlignée en violet. Un simple **clic** déplace le point de départ de la preview à cet instant — plus besoin de taper les secondes à la main. Pendant la lecture, un curseur vert avance en temps réel.
+Une barre de forme d'onde apparaît sous la preview dès l'ouverture de l'éditeur. Elle représente la totalité du son, avec la zone preview surlignée en violet. Un **clic** déplace le point de départ de la preview à cet instant. Pendant la lecture, un curseur vert avance en temps réel.
 
 **✍ Artiste + Titre séparés**
-Deux champs distincts dans le panneau texte. Sur la vidéo, l'artiste s'affiche en plus grand et bold au-dessus, avec une fine ligne de séparation, et le titre en dessous légèrement plus petit. Si un seul champ est rempli, l'affichage s'adapte automatiquement. Un aperçu textuel s'affiche en temps réel sous les champs.
+Deux champs distincts dans le panneau texte. Sur la vidéo, l'artiste s'affiche en plus grand et bold au-dessus, avec une fine ligne de séparation, et le titre en dessous. Un aperçu s'affiche en temps réel sous les champs.
 
 **⌨ Raccourcis clavier**
+
 | Touche | Action |
 |---|---|
 | `Espace` | Play / Pause preview audio |
@@ -132,7 +147,7 @@ Deux champs distincts dans le panneau texte. Sur la vidéo, l'artiste s'affiche 
 
 **⚠️ Vérification FFmpeg au démarrage** — Bannière orange non-bloquante si `ffmpeg` ou `ffplay` est absent du PATH.
 
-**✅ Nom projet obligatoire** — Validation inline avant l'export avec message d'erreur sous le champ. Plus de popup surprise en plein workflow.
+**✅ Nom projet obligatoire** — Validation inline avant l'export. Plus de popup surprise en plein workflow.
 
 **📂 Drag & Drop** — Glisse directement tes fichiers audio et image depuis l'Explorateur Windows sur la fenêtre.
 
@@ -175,7 +190,7 @@ python main.py
 | `numpy` | Calculs matriciels audio + vidéo | ✅ |
 | `opencv-python` | Rendu frame OpenCV | ✅ |
 | `Pillow` | Texte, fonts, compositing | ✅ |
-| `librosa` | Analyse audio (beat, spectre, bandes, waveform) | ✅ |
+| `librosa` | Analyse audio + waveform | ✅ |
 | `soundfile` | Lecture durée audio | ✅ |
 | `customtkinter` | Interface modern dark | ✅ |
 | `tkinterdnd2` | Drag & drop fichiers | ⚡ Optionnel |
@@ -190,10 +205,10 @@ python main.py
 3. Choisir la pochette  (ou la glisser directement)
 4. Choisir un preset visuel dans le panneau droit
 5. Cliquer sur la waveform pour positionner la preview
-6. Espace pour lancer la preview audio synchronisée
+6. Appuyer sur Espace pour lancer la preview audio synchronisée
 7. Basculer 16:9 ↔ 9:16 pour voir le rendu SHORT
 8. Renseigner Artiste et/ou Titre
-9. Saisir le nom du projet  →  choisir CHECK / SHORT / COMPLET  →  GÉNÉRER
+9. Saisir le nom du projet  →  CHECK / SHORT / COMPLET  →  GÉNÉRER
 ```
 
 ---
@@ -241,7 +256,6 @@ pyinstaller --onefile --noconsole \
 ```
 
 Exécutable dans `dist/TAC_MP4_Studio.exe` (~100MB avec toutes les dépendances).
-Distribuer avec FFmpeg ou indiquer à l'utilisateur de l'installer séparément.
 
 ---
 
