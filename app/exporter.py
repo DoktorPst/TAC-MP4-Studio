@@ -149,6 +149,9 @@ def render_video(
         settings.image_zoom,
         out_w,
         out_h,
+        bg_mode=settings.bg_mode,
+        gradient_top=settings.gradient_top,
+        gradient_bottom=settings.gradient_bottom,
     )
 
     particles: list = []
@@ -216,5 +219,23 @@ def render_video(
     except OSError:
         pass
 
+    # Miniature pour l'historique (Update 3)
+    _extract_thumbnail(settings.output_path)
+
     if progress_callback:
         progress_callback(f"Terminé : {settings.output_path}")
+
+
+def _extract_thumbnail(video_path: str) -> None:
+    """Extrait une frame à t=1s comme miniature JPG à côté de la vidéo."""
+    try:
+        thumb = str(video_path).replace(".mp4", "_thumb.jpg")
+        cmd = [
+            "ffmpeg", "-y", "-loglevel", "quiet",
+            "-ss", "00:00:01", "-i", video_path,
+            "-vframes", "1", "-vf", "scale=320:-2",
+            thumb,
+        ]
+        subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except Exception:
+        pass

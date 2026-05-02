@@ -75,32 +75,56 @@ def rounded_rectangle(img, pt1, pt2, radius, color, thickness=-1):
 
 # ── Chargement image ──────────────────────────────────────────────────────────
 
-def load_cover_image(path, blur_radius, zoom, width=WIDTH, height=HEIGHT):
+def _hex_to_bgr(hex_color: str) -> tuple[int, int, int]:
+    h = hex_color.lstrip("#")
+    r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+    return (b, g, r)
+
+
+def generate_gradient_bg(color_top: str, color_bottom: str,
+                          width: int, height: int) -> np.ndarray:
+    """Génère un fond dégradé vertical BGR (numpy vectorisé)."""
+    top = np.array(_hex_to_bgr(color_top),    dtype=np.float32)
+    bot = np.array(_hex_to_bgr(color_bottom), dtype=np.float32)
+    t = np.linspace(0.0, 1.0, height, dtype=np.float32)[:, np.newaxis, np.newaxis]
+    gradient = (top[np.newaxis] * (1.0 - t) + bot[np.newaxis] * t).astype(np.uint8)
+    return np.repeat(gradient, width, axis=1)
+
+
+def load_cover_image(path, blur_radius, zoom, width=WIDTH, height=HEIGHT,
+                     bg_mode="photo", gradient_top="#1a1a2e", gradient_bottom="#0f3460"):
+    """Charge la pochette et génère le background (photo floutée ou dégradé).
+
+    Update 3 : bg_mode "photo" | "gradient"
+    """
     img = Image.open(path).convert("RGB")
-    bg = img.copy()
 
-    src_w, src_h = bg.size
-    target_ratio = width / height
-    src_ratio = src_w / src_h
-
-    if src_ratio > target_ratio:
-        new_w = int(src_h * target_ratio)
-        left = (src_w - new_w) // 2
-        bg = bg.crop((left, 0, left + new_w, src_h))
+    if bg_mode == "gradient":
+        bg_arr = generate_gradient_bg(gradient_top, gradient_bottom, width, height)
     else:
-        new_h = int(src_w / target_ratio)
-        top = (src_h - new_h) // 2
-        bg = bg.crop((0, top, src_w, top + new_h))
+        bg = img.copy()
+        src_w, src_h = bg.size
+        target_ratio = width / height
+        src_ratio = src_w / src_h
 
-    bg = bg.resize((width, height), Image.LANCZOS)
-    if blur_radius > 0:
-        bg = bg.filter(ImageFilter.GaussianBlur(blur_radius))
-    bg = ImageEnhance.Brightness(bg).enhance(0.16)
-    bg = ImageEnhance.Contrast(bg).enhance(1.25)
-    bg_arr = cv2.cvtColor(np.array(bg), cv2.COLOR_RGB2BGR)
-    bg_arr = cv2.addWeighted(bg_arr, 0.50, np.zeros_like(bg_arr), 0.50, 0)
+        if src_ratio > target_ratio:
+            new_w = int(src_h * target_ratio)
+            left = (src_w - new_w) // 2
+            bg = bg.crop((left, 0, left + new_w, src_h))
+        else:
+            new_h = int(src_w / target_ratio)
+            top_px = (src_h - new_h) // 2
+            bg = bg.crop((0, top_px, src_w, top_px + new_h))
 
-    # Pochette plus grande en mode vertical
+        bg = bg.resize((width, height), Image.LANCZOS)
+        if blur_radius > 0:
+            bg = bg.filter(ImageFilter.GaussianBlur(blur_radius))
+        bg = ImageEnhance.Brightness(bg).enhance(0.16)
+        bg = ImageEnhance.Contrast(bg).enhance(1.25)
+        bg_arr = cv2.cvtColor(np.array(bg), cv2.COLOR_RGB2BGR)
+        bg_arr = cv2.addWeighted(bg_arr, 0.50, np.zeros_like(bg_arr), 0.50, 0)
+
+    # Pochette
     is_vertical = height > width
     zoom_factor = 0.60 if is_vertical else 0.53
     max_side = int(min(width, height) * zoom_factor * zoom)
