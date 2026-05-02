@@ -882,8 +882,10 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
         preview_wrap = ctk.CTkFrame(left, fg_color="#000000", corner_radius=12,
                                     border_color=BORDER, border_width=1)
         preview_wrap.pack(fill="both", expand=True)
+        self.preview_wrap = preview_wrap   # référence pour lire les dimensions
+
         self.preview_label = tk.Label(preview_wrap, bg="#000000", bd=0, highlightthickness=0)
-        self.preview_label.pack(fill="both", expand=True, padx=2, pady=2)
+        self.preview_label.pack(fill="both", expand=True)
         self.preview_label.bind("<Double-Button-1>", lambda e: self._open_fullscreen())
 
         # Waveform
@@ -1464,6 +1466,10 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
 
     # ── Helpers UI ────────────────────────────────────────────────────────────
 
+    def _update_preview_layout(self):
+        """Conservé pour compatibilité — logique déplacée dans _tick_preview."""
+        pass
+
     @staticmethod
     def _short_name(path, maxlen=35):
         if not path:
@@ -1796,7 +1802,36 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
         )
 
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        self.photo = ImageTk.PhotoImage(Image.fromarray(rgb))
+        img = Image.fromarray(rgb)
+
+        # Lire les dimensions réelles du wrap (fiable après rendu UI)
+        try:
+            wrap_w = self.preview_wrap.winfo_width()
+            wrap_h = self.preview_wrap.winfo_height()
+        except Exception:
+            wrap_w, wrap_h = 0, 0
+
+        if wrap_w < 10 or wrap_h < 10:
+            # UI pas encore prête — retry au prochain tick
+            self.after(int(1000 / FPS), self._tick_preview)
+            return
+
+        if self.preview_is_vertical:
+            # 9:16 — calculer sans déformer
+            pw = int(wrap_h * 9 / 16)
+            if pw <= wrap_w:
+                ph = wrap_h
+            else:
+                pw = wrap_w
+                ph = int(wrap_w * 16 / 9)
+            content_img = img.resize((pw, ph), Image.LANCZOS)
+            final = Image.new("RGB", (wrap_w, wrap_h), (0, 0, 0))
+            final.paste(content_img, ((wrap_w - pw) // 2, (wrap_h - ph) // 2))
+        else:
+            # 16:9 — remplit toute la zone
+            final = img.resize((wrap_w, wrap_h), Image.LANCZOS)
+
+        self.photo = ImageTk.PhotoImage(final)
         self.preview_label.configure(image=self.photo)
 
         if not self.audio_playing:
