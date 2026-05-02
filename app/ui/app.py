@@ -45,6 +45,9 @@ WAVEFORM_H  = 56
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
 
+# ── Version ───────────────────────────────────────────────────────────────────
+VERSION = "1.5.1"   # Update 5 — fix pochette glitch · home redesign · export UI
+
 BG      = "#0a0a0a"
 SURF    = "#111111"
 SURF2   = "#191919"
@@ -93,6 +96,54 @@ def _card(parent, **kw):
 def _sep(parent):
     ctk.CTkFrame(parent, height=1, fg_color=BORDER, corner_radius=0).pack(
         fill="x", padx=12, pady=(8, 0))
+
+
+# ── Tooltip simple ───────────────────────────────────────────────────────────
+
+class _Tooltip:
+    """Tooltip minimaliste — apparaît après 500ms, disparaît au Leave."""
+
+    NAMES = {
+        "⚡": "Presets",
+        "🎵": "Ambiance · Vinyle · Texte",
+        "🎨": "Fond · Dégradé · Flottant",
+        "📊": "Spectre · Couleur",
+        "🚀": "Export",
+    }
+
+    def __init__(self, widget: tk.Widget, text: str) -> None:
+        self._widget = widget
+        self._text   = text
+        self._tip: tk.Toplevel | None = None
+        self._job: str | None = None
+        widget.bind("<Enter>", self._schedule, add="+")
+        widget.bind("<Leave>", self._cancel,   add="+")
+
+    def _schedule(self, _=None) -> None:
+        self._cancel()
+        self._job = self._widget.after(500, self._show)
+
+    def _cancel(self, _=None) -> None:
+        if self._job:
+            self._widget.after_cancel(self._job)
+            self._job = None
+        if self._tip:
+            try:
+                self._tip.destroy()
+            except Exception:
+                pass
+            self._tip = None
+
+    def _show(self) -> None:
+        x = self._widget.winfo_rootx() + self._widget.winfo_width() // 2
+        y = self._widget.winfo_rooty() + self._widget.winfo_height() + 4
+        self._tip = tk.Toplevel(self._widget)
+        self._tip.wm_overrideredirect(True)
+        self._tip.configure(bg="#1e1e1e")
+        tk.Label(self._tip, text=self._text, bg="#1e1e1e", fg="#e4e4e7",
+                 font=("Segoe UI", 9), padx=10, pady=5,
+                 relief="flat").pack()
+        self._tip.wm_geometry(f"+{x - 60}+{y}")
 
 
 class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
@@ -145,6 +196,9 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
         self.vinyl_mode  = tk.BooleanVar(value=bool(settings.get("vinyl_mode", False)))
         self.vinyl_black = tk.BooleanVar(value=bool(settings.get("vinyl_black", False)))
         self.vinyl_angle: float = 0.0
+
+        # Presets utilisateur
+        self.user_presets: dict = self.config_data.get("user_presets", {})
 
         # Update 5 — couleur spectre + fond flottant
         self.spectrum_color     = settings.get("spectrum_color", "#ffffff")
@@ -454,6 +508,14 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
                                         text_color=MUTED, font=FONT_SM)
         self._status_lbl.pack(side="right", padx=(0, 4))
 
+        # Bouton réglages ⚙
+        gear = ctk.CTkButton(hdr, text="⚙", width=34, height=34,
+                             fg_color="transparent", hover_color=SURF2,
+                             text_color=MUTED, font=ctk.CTkFont("Segoe UI", 16),
+                             corner_radius=8, command=self._open_settings_window)
+        gear.pack(side="right", padx=(0, 4), pady=12)
+        _Tooltip(gear, "Réglages & raccourcis")
+
         self.main = ctk.CTkFrame(self, fg_color=BG, corner_radius=0)
         self.main.pack(fill="both", expand=True)
 
@@ -486,19 +548,55 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
     def show_home(self):
         self._clear_main()
         self._set_status("Accueil")
+
+        # Fond subtil — deux rectangles de couleur
+        bg_left = ctk.CTkFrame(self.main, fg_color="#0d0420", corner_radius=0)
+        bg_left.place(relx=0, rely=0, relwidth=0.5, relheight=1)
+        bg_right = ctk.CTkFrame(self.main, fg_color="#050505", corner_radius=0)
+        bg_right.place(relx=0.5, rely=0, relwidth=0.5, relheight=1)
+
+        # Bloc central
         center = ctk.CTkFrame(self.main, fg_color="transparent")
-        center.place(relx=0.5, rely=0.46, anchor="center")
-        ctk.CTkLabel(center, text="TAC", font=ctk.CTkFont("Segoe UI", 64, "bold"),
-                     text_color=ACCLT).pack()
-        ctk.CTkLabel(center, text="MP4 Studio", font=ctk.CTkFont("Segoe UI", 22, "bold"),
-                     text_color=TEXT).pack(pady=(0, 4))
-        ctk.CTkLabel(center, text="Vidéos musicales réactives automatiques",
-                     text_color=MUTED, font=FONT_SM).pack(pady=(0, 32))
+        center.place(relx=0.5, rely=0.48, anchor="center")
+
+        # Logo
+        logo_row = ctk.CTkFrame(center, fg_color="transparent")
+        logo_row.pack()
+        ctk.CTkLabel(logo_row, text="TAC",
+                     font=ctk.CTkFont("Segoe UI", 72, "bold"),
+                     text_color=ACCLT).pack(side="left")
+        ctk.CTkLabel(logo_row, text=" MP4",
+                     font=ctk.CTkFont("Segoe UI", 72, "bold"),
+                     text_color=TEXT).pack(side="left")
+
+        ctk.CTkLabel(center, text="Studio",
+                     font=ctk.CTkFont("Segoe UI", 32, "bold"),
+                     text_color="#3d3d3d").pack(pady=(0, 6))
+
+        # Tagline
+        ctk.CTkLabel(center, text="Vidéos musicales réactives · automatiques · gratuites",
+                     text_color=MUTED, font=ctk.CTkFont("Segoe UI", 11)).pack(pady=(0, 32))
+
+        # Features row
+        feats = ctk.CTkFrame(center, fg_color="transparent")
+        feats.pack(pady=(0, 36))
+        for icon, label in [("🎵", "9 spectres"), ("🎨", "Dégradés"), ("🎵", "Vinyle"), ("📊", "Oscilloscope")]:
+            pill = ctk.CTkFrame(feats, fg_color=SURF2, corner_radius=20,
+                                border_color=BORDER, border_width=1)
+            pill.pack(side="left", padx=5)
+            ctk.CTkLabel(pill, text=f"  {icon}  {label}  ",
+                         text_color=MUTED, font=FONT_MU).pack(padx=2, pady=6)
+
+        # CTA buttons
         _btn(center, "  ✦  CRÉER UNE VIDÉO", self.show_step_audio,
-             accent=True, width=280, height=52,
+             accent=True, width=300, height=54,
              font=ctk.CTkFont("Segoe UI", 14, "bold")).pack(pady=6)
-        _btn(center, "  ☰  Historique", self.show_history,
-             width=280, height=42).pack(pady=6)
+        _btn(center, "  ☰  Historique des créations", self.show_history,
+             width=300, height=44).pack(pady=6)
+
+        # Version badge
+        ctk.CTkLabel(center, text=f"v{VERSION}",
+                     text_color="#2d2d2d", font=FONT_MU).pack(pady=(20, 0))
 
     def show_step_audio(self):
         self._clear_main()
@@ -714,6 +812,15 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
         for tab_name in ["⚡", "🎵", "🎨", "📊", "🚀"]:
             tabs.add(tab_name)
 
+        # Agrandir les boutons d'onglets
+        try:
+            tabs._segmented_button.configure(
+                font=ctk.CTkFont("Segoe UI", 17),
+                height=44,
+            )
+        except Exception:
+            pass
+
         def mkscroll(tab_name):
             s = ctk.CTkScrollableFrame(tabs.tab(tab_name), fg_color="transparent",
                                        scrollbar_button_color=SURF3,
@@ -721,9 +828,26 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
             s.pack(fill="both", expand=True)
             return s
 
-        # ── ⚡ Presets ────────────────────────────────────────────────────────
+        # Tooltips sur les onglets
+        _tab_tips = {
+            "⚡": "Presets",
+            "🎵": "Ambiance · Vinyle · Texte",
+            "🎨": "Fond · Dégradé · Flottant",
+            "📊": "Spectre · Couleur",
+            "🚀": "Export",
+        }
+        try:
+            for tab_name, tip_text in _tab_tips.items():
+                btn = tabs._segmented_button._buttons_dict.get(tab_name)
+                if btn:
+                    _Tooltip(btn, tip_text)
+        except Exception:
+            pass
+
+        # ── ⚡ Presets ────────────────────────────────────────────────────────────
         tp = mkscroll("⚡")
-        ctk.CTkLabel(tp, text="Preset global", text_color=MUTED, font=FONT_MU, anchor="w").pack(anchor="w", pady=(8, 2))
+
+        ctk.CTkLabel(tp, text="Presets intégrés", text_color=MUTED, font=FONT_MU, anchor="w").pack(anchor="w", pady=(8, 2))
         ctk.CTkComboBox(tp, variable=self.global_preset,
                         values=list(GLOBAL_PRESETS.keys()),
                         command=lambda _: self._apply_global_preset(),
@@ -731,15 +855,24 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
                         button_color=ACCENT, button_hover_color=ACCHOV,
                         dropdown_fg_color=SURF2, text_color=TEXT,
                         font=FONT_SM).pack(fill="x", pady=(0, 6))
-        _btn(tp, "✦  APPLIQUER LE PRESET", self._apply_global_preset,
-             accent=True, height=36, small=True).pack(fill="x", pady=(0, 10))
+        _btn(tp, "✦  APPLIQUER", self._apply_global_preset,
+             accent=True, height=34, small=True).pack(fill="x", pady=(0, 10))
+
         _sep(tp)
-        ctk.CTkLabel(tp, text="Raccourcis", text_color=MUTED, font=FONT_SEC, anchor="w").pack(anchor="w", pady=(8, 4))
-        for k, v in [("Espace", "Play / Pause"), ("R", "Recharger"), ("F11", "Plein écran"), ("Échap", "Accueil")]:
-            row = ctk.CTkFrame(tp, fg_color=SURF3, corner_radius=6)
-            row.pack(fill="x", pady=2)
-            ctk.CTkLabel(row, text=k, text_color=ACCLT, font=FONT_SEC, width=56, anchor="w").pack(side="left", padx=8, pady=5)
-            ctk.CTkLabel(row, text=v, text_color=MUTED, font=FONT_MU, anchor="w").pack(side="left")
+        ctk.CTkLabel(tp, text="Mes presets", text_color=MUTED, font=FONT_MU, anchor="w").pack(anchor="w", pady=(10, 4))
+        self._user_preset_name = tk.StringVar()
+        save_row = ctk.CTkFrame(tp, fg_color="transparent")
+        save_row.pack(fill="x", pady=(0, 6))
+        ctk.CTkEntry(save_row, textvariable=self._user_preset_name,
+                     placeholder_text="Nom du preset...",
+                     fg_color=SURF3, border_color=BORDER, text_color=TEXT,
+                     font=FONT_SM).pack(side="left", fill="x", expand=True, padx=(0, 6))
+        _btn(save_row, "💾", self._save_user_preset, small=True, width=36, height=32,
+             accent=True).pack(side="right")
+
+        self._user_presets_frame = ctk.CTkScrollableFrame(tp, fg_color="transparent", height=180)
+        self._user_presets_frame.pack(fill="x")
+        self._refresh_user_presets_ui()
 
         # ── 🎵 Ambiance ────────────────────────────────────────────────────────
         ta = mkscroll("🎵")
@@ -860,22 +993,63 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
                      fg_color=SURF3, border_color=BORDER, text_color=TEXT,
                      font=FONT_SM, width=80).pack(side="left")
         _btn(prow, "Analyser", self._prepare_preview, small=True, width=90, height=28).pack(side="left", padx=(8, 0))
-        ctk.CTkLabel(te, text="Type d'export", text_color=MUTED, font=FONT_MU, anchor="w").pack(anchor="w", pady=(0, 4))
-        self._duration_btns: dict[str, ctk.CTkButton] = {}
-        for val, title, desc in [
-            ("CHECK",   "CHECK — 15 secondes",  "Horizontal 1920×1080"),
-            ("SHORT",   "SHORT — 1 minute",      "Milieu · vertical 1080×1920"),
-            ("COMPLET", "COMPLET — Son entier",  "Durée totale · horizontal 1920×1080"),
-        ]:
-            b = ctk.CTkButton(te, text=f"{title}\n{desc}",
-                              command=lambda v=val: self._set_export_mode(v),
-                              fg_color=SURF3, hover_color=SURF2, text_color=MUTED,
-                              font=FONT_H2, corner_radius=8, height=52, anchor="w")
-            b.pack(fill="x", pady=3)
-            self._duration_btns[val] = b
+        ctk.CTkLabel(te, text="Type d'export", text_color=MUTED, font=FONT_MU, anchor="w").pack(anchor="w", pady=(0, 8))
+
+        # Cards de mode — frame clickable + badge coloré
+        self._duration_cards: dict[str, ctk.CTkFrame] = {}
+        self._duration_titles: dict[str, ctk.CTkLabel] = {}
+
+        _modes = [
+            ("CHECK",   "15 s",   "CHECK",   "Horizontal · 1920 × 1080",             WARN),
+            ("SHORT",   "1 min",  "SHORT",   "Vertical · 1080 × 1920 · milieu du son", ACCLT),
+            ("COMPLET", "∞",     "COMPLET", "Durée totale · 1920 × 1080",            SUCCESS),
+        ]
+        for val, badge, title, desc, badge_color in _modes:
+            card = ctk.CTkFrame(te, fg_color=SURF3, corner_radius=10,
+                                border_color=BORDER, border_width=1)
+            card.pack(fill="x", pady=5)
+
+            row = ctk.CTkFrame(card, fg_color="transparent")
+            row.pack(fill="x", padx=14, pady=12)
+
+            # Badge pill
+            pill = ctk.CTkLabel(row, text=badge, text_color="#080808",
+                                fg_color=badge_color, corner_radius=8,
+                                font=ctk.CTkFont("Segoe UI", 10, "bold"),
+                                width=48, height=26)
+            pill.pack(side="left")
+
+            # Textes
+            txt = ctk.CTkFrame(row, fg_color="transparent")
+            txt.pack(side="left", fill="x", expand=True, padx=(12, 0))
+            title_lbl = ctk.CTkLabel(txt, text=title, text_color=MUTED,
+                                     font=FONT_H2, anchor="w")
+            title_lbl.pack(anchor="w")
+            ctk.CTkLabel(txt, text=desc, text_color="#444444",
+                         font=FONT_MU, anchor="w").pack(anchor="w")
+
+            # Coche sélection à droite
+            check_lbl = ctk.CTkLabel(row, text="", text_color=badge_color,
+                                     font=ctk.CTkFont("Segoe UI", 18, "bold"), width=22)
+            check_lbl.pack(side="right")
+
+            # Click binding sur tous les enfants
+            def _click(e, v=val): self._set_export_mode(v)
+            for w in (card, row, pill, txt, title_lbl, check_lbl):
+                try:
+                    w.bind("<Button-1>", _click)
+                    w.configure(cursor="hand2")
+                except Exception:
+                    pass
+
+            self._duration_cards[val]  = (card, title_lbl, check_lbl, badge_color)
+            self._duration_titles[val] = title_lbl
+
         self._refresh_mode_btns()
+
+        ctk.CTkFrame(te, height=1, fg_color=BORDER, corner_radius=0).pack(fill="x", pady=(10, 0))
         _btn(te, "  ▶  GÉNÉRER", self._start_export,
-             accent=True, height=46).pack(fill="x", pady=(12, 0))
+             accent=True, height=50, font=ctk.CTkFont("Segoe UI", 13, "bold")).pack(fill="x", pady=(10, 0))
 
         self._prepare_preview()
 
@@ -943,14 +1117,14 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
         self._schedule_persist()
 
     def _randomize_gradient_colors(self):
-        """Génère deux couleurs harmonieuses aléatoires pour le dégradé."""
+        """Génère deux couleurs vives et saturées pour le dégradé."""
         import colorsys, random
-        h = random.random()
-        h2 = (h + 0.05 + random.random() * 0.20) % 1.0
-        s1 = 0.65 + random.random() * 0.30
-        s2 = 0.55 + random.random() * 0.30
-        v1 = 0.12 + random.random() * 0.16   # couleurs sombres pour les fonds
-        v2 = 0.07 + random.random() * 0.12
+        h  = random.random()
+        h2 = (h + 0.08 + random.random() * 0.22) % 1.0
+        s1 = 0.80 + random.random() * 0.20   # très saturé
+        s2 = 0.70 + random.random() * 0.25
+        v1 = 0.55 + random.random() * 0.40   # lumineux (pas sombre)
+        v2 = 0.40 + random.random() * 0.35
         def to_hex(r, g, b):
             return f"#{int(r*255):02x}{int(g*255):02x}{int(b*255):02x}"
         c1 = to_hex(*colorsys.hsv_to_rgb(h,  s1, v1))
@@ -978,6 +1152,139 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
                         self._grad_hex_lbls[attr].configure(text=color)
                     except Exception:
                         pass
+
+    # ── Presets utilisateur ─────────────────────────────────────────────────────
+
+    def _current_visual_snapshot(self) -> dict:
+        """Capture tous les réglages visuels actuels pour un preset."""
+        return {
+            "particle_preset":     self.particle_preset.get(),
+            "smoke_preset":        self.smoke_preset.get(),
+            "smoke_color":         self.smoke_color.get(),
+            "spectrum_style":      self.spectrum_style.get(),
+            "spectrum_size":       self.spectrum_size.get(),
+            "spectrum_y":          self.spectrum_y.get(),
+            "image_zoom":          self.image_zoom.get(),
+            "pulse_strength":      self.pulse_strength.get(),
+            "vinyl_mode":          bool(self.vinyl_mode.get()),
+            "vinyl_black":         bool(self.vinyl_black.get()),
+            "spectrum_color":      self.spectrum_color,
+            "spectrum_color_auto": bool(self.spectrum_color_auto.get()),
+            "floating_bg":         bool(self.floating_bg.get()),
+            "bg_mode":             self.bg_mode.get(),
+            "gradient_top":        self.gradient_top,
+            "gradient_bottom":     self.gradient_bottom,
+        }
+
+    def _save_user_preset(self):
+        name = self._user_preset_name.get().strip()
+        if not name:
+            return
+        self.user_presets[name] = self._current_visual_snapshot()
+        self._user_preset_name.set("")
+        self._persist_now()
+        self._refresh_user_presets_ui()
+
+    def _apply_user_preset(self, name: str):
+        p = self.user_presets.get(name, {})
+        if not p:
+            return
+        self.particle_preset.set(p.get("particle_preset", self.particle_preset.get()))
+        self.smoke_preset.set(p.get("smoke_preset", self.smoke_preset.get()))
+        self.smoke_color.set(p.get("smoke_color", self.smoke_color.get()))
+        self.spectrum_style.set(p.get("spectrum_style", self.spectrum_style.get()))
+        self.spectrum_size.set(float(p.get("spectrum_size", self.spectrum_size.get())))
+        self.spectrum_y.set(float(p.get("spectrum_y", self.spectrum_y.get())))
+        self.image_zoom.set(float(p.get("image_zoom", self.image_zoom.get())))
+        self.pulse_strength.set(float(p.get("pulse_strength", self.pulse_strength.get())))
+        if "vinyl_mode" in p:       self.vinyl_mode.set(p["vinyl_mode"])
+        if "vinyl_black" in p:      self.vinyl_black.set(p["vinyl_black"])
+        if "spectrum_color" in p:   self._set_spectrum_color(p["spectrum_color"])
+        if "floating_bg" in p:      self.floating_bg.set(p["floating_bg"])
+        if "bg_mode" in p:
+            self.bg_mode.set(p["bg_mode"])
+            self._refresh_gradient_visibility()
+        if "gradient_top" in p:     self.gradient_top = p["gradient_top"]
+        if "gradient_bottom" in p:  self.gradient_bottom = p["gradient_bottom"]
+        self._update_gradient_ui()
+        self._schedule_persist()
+        if not self.is_rendering:
+            self._reload_visuals_only()
+
+    def _delete_user_preset(self, name: str):
+        self.user_presets.pop(name, None)
+        self._persist_now()
+        self._refresh_user_presets_ui()
+
+    def _refresh_user_presets_ui(self):
+        if not hasattr(self, "_user_presets_frame"):
+            return
+        for child in self._user_presets_frame.winfo_children():
+            child.destroy()
+
+        if not self.user_presets:
+            ctk.CTkLabel(self._user_presets_frame,
+                         text="Aucun preset sauvegardé",
+                         text_color=MUTED, font=FONT_MU).pack(pady=8)
+            return
+
+        for name in list(self.user_presets.keys()):
+            row = ctk.CTkFrame(self._user_presets_frame, fg_color=SURF3, corner_radius=6)
+            row.pack(fill="x", pady=2)
+            ctk.CTkLabel(row, text=name, text_color=TEXT, font=FONT_SM,
+                         anchor="w").pack(side="left", padx=10, pady=6, fill="x", expand=True)
+            _btn(row, "▶", lambda n=name: self._apply_user_preset(n),
+                 small=True, width=30, height=26, accent=True).pack(side="right", padx=(0, 4))
+            _btn(row, "✕", lambda n=name: self._delete_user_preset(n),
+                 small=True, width=28, height=26, danger=True).pack(side="right", padx=(0, 4))
+
+    # ── Fenêtre réglages ─────────────────────────────────────────────────────────
+
+    def _open_settings_window(self):
+        win = ctk.CTkToplevel(self)
+        win.title("Réglages")
+        win.configure(fg_color=BG)
+        win.geometry("420x380")
+        win.resizable(False, False)
+        win.grab_set()
+
+        # Header
+        hdr_row = ctk.CTkFrame(win, fg_color="transparent")
+        hdr_row.pack(fill="x", padx=24, pady=(20, 4))
+        ctk.CTkLabel(hdr_row, text="Réglages", font=FONT_H1, text_color=TEXT).pack(side="left")
+        ctk.CTkLabel(hdr_row,
+                     text=f"v{VERSION}",
+                     text_color=ACCLT,
+                     font=ctk.CTkFont("Segoe UI", 10, "bold"),
+                     fg_color=SURF2, corner_radius=6).pack(side="right", padx=(0, 4), ipadx=8, ipady=4)
+        ctk.CTkLabel(win, text="TAC MP4 Studio", text_color=MUTED, font=FONT_MU).pack(
+            anchor="w", padx=24, pady=(0, 16))
+
+        ctk.CTkFrame(win, height=1, fg_color=BORDER, corner_radius=0).pack(fill="x", padx=24)
+
+        # Raccourcis clavier
+        ctk.CTkLabel(win, text="Raccourcis clavier", text_color=ACCLT,
+                     font=FONT_SEC).pack(anchor="w", padx=24, pady=(16, 8))
+
+        shortcuts = [
+            ("Espace",    "Play / Pause la preview audio"),
+            ("R",         "Recharger la preview"),
+            ("F11",       "Ouvrir la preview en plein écran"),
+            ("Échap",     "Fermer le plein écran / Retour accueil"),
+            ("Double-clic", "Ouvrir la preview en plein écran"),
+        ]
+        for key, desc in shortcuts:
+            row = ctk.CTkFrame(win, fg_color=SURF2, corner_radius=8)
+            row.pack(fill="x", padx=24, pady=3)
+            ctk.CTkLabel(row, text=key, text_color=ACCLT, font=FONT_SEC,
+                         width=120, anchor="w").pack(side="left", padx=12, pady=8)
+            ctk.CTkLabel(row, text=desc, text_color=TEXT, font=FONT_SM,
+                         anchor="w").pack(side="left", padx=(0, 12))
+
+        ctk.CTkFrame(win, height=1, fg_color=BORDER, corner_radius=0).pack(
+            fill="x", padx=24, pady=(16, 0))
+
+        _btn(win, "Fermer", win.destroy, width=120, height=34, small=True).pack(pady=16)
 
     def _on_bg_mode_changed(self):
         self._refresh_gradient_visibility()
@@ -1062,14 +1369,26 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
         self._schedule_persist()
 
     def _refresh_mode_btns(self):
-        if not hasattr(self, "_duration_btns"):
-            return
         sel = self.export_mode.get()
-        for val, btn in self._duration_btns.items():
-            if val == sel:
-                btn.configure(fg_color=ACCENT, hover_color=ACCHOV, text_color=TEXT)
-            else:
-                btn.configure(fg_color=SURF3, hover_color=SURF2, text_color=MUTED)
+        # Nouveau système cards
+        if hasattr(self, "_duration_cards"):
+            for val, (card, title_lbl, check_lbl, badge_color) in self._duration_cards.items():
+                if val == sel:
+                    card.configure(fg_color="#140d24", border_color=ACCENT, border_width=2)
+                    title_lbl.configure(text_color=TEXT)
+                    check_lbl.configure(text="✓")
+                else:
+                    card.configure(fg_color=SURF3, border_color=BORDER, border_width=1)
+                    title_lbl.configure(text_color=MUTED)
+                    check_lbl.configure(text="")
+            return
+        # Fallback ancien système CTkButton
+        if hasattr(self, "_duration_btns"):
+            for val, btn in self._duration_btns.items():
+                if val == sel:
+                    btn.configure(fg_color=ACCENT, hover_color=ACCHOV, text_color=TEXT)
+                else:
+                    btn.configure(fg_color=SURF3, hover_color=SURF2, text_color=MUTED)
 
     # ══════════════════════════════════════════════════════════════════════════
     # CONFIG
@@ -1110,6 +1429,7 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
             "spectrum_color_auto": bool(self.spectrum_color_auto.get()),
             "floating_bg":        bool(self.floating_bg.get()),
         }
+        self.config_data["user_presets"] = self.user_presets
         save_config(self.config_data)
 
     def _on_setting_changed(self):
