@@ -1,0 +1,523 @@
+"""Rendu frame par frame — OpenCV + PIL.
+
+Nouveautés :
+- 4 nouveaux spectres : Barres néon, Symétrie miroir, Arc plasma, Onde plasma
+- Adaptation automatique au format SHORT vertical (is_vertical)
+  - Pochette repositionnée en haut du cadre
+  - Spectre repositionné dans la zone basse
+  - Texte adapté entre pochette et spectre
+- Cache vignette + police (performance)
+"""
+from __future__ import annotations
+
+import math
+from pathlib import Path
+from typing import Any
+
+import cv2
+import numpy as np
+from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont
+
+from app.models import RenderSettings
+from app.particles import FloatingParticle, SmokeBlob
+from app.presets import (
+    WIDTH, HEIGHT,
+    PARTICLE_PRESETS, SMOKE_PRESETS, SMOKE_COLORS, REGGAE_PALETTE,
+)
+
+# ── Caches ────────────────────────────────────────────────────────────────────
+_vignette_cache: dict[tuple[int, int], np.ndarray] = {}
+_font_cache: dict[tuple[int, bool], Any] = {}
+
+
+# ── Utilitaires ───────────────────────────────────────────────────────────────
+
+def safe_font(size: int, bold: bool = False) -> Any:
+    size = max(12, (size // 2) * 2)
+    key = (size, bold)
+    if key not in _font_cache:
+        candidates = [
+            "C:/Windows/Fonts/segoeuib.ttf" if bold else "C:/Windows/Fonts/segoeui.ttf",
+            "C:/Windows/Fonts/arialbd.ttf"  if bold else "C:/Windows/Fonts/arial.ttf",
+        ]
+        for p in candidates:
+            if Path(p).exists():
+                _font_cache[key] = ImageFont.truetype(p, size=size)
+                break
+        else:
+            _font_cache[key] = ImageFont.load_default()
+    return _font_cache[key]
+
+
+def _get_vignette(width: int, height: int) -> np.ndarray:
+    key = (width, height)
+    if key not in _vignette_cache:
+        y_idx, x_idx = np.ogrid[:height, :width]
+        dist = np.sqrt((x_idx - width / 2.0) ** 2 + (y_idx - height / 2.0) ** 2)
+        mask = np.clip(1.0 - dist / (min(width, height) * 0.92), 0.16, 1.0)
+        _vignette_cache[key] = mask[..., np.newaxis].astype(np.float32)
+    return _vignette_cache[key]
+
+
+def rounded_rectangle(img, pt1, pt2, radius, color, thickness=-1):
+    x1, y1 = pt1
+    x2, y2 = pt2
+    radius = max(1, min(radius, abs(x2 - x1) // 2, abs(y2 - y1) // 2))
+    if thickness == -1:
+        cv2.rectangle(img, (x1 + radius, y1), (x2 - radius, y2), color, -1)
+        cv2.rectangle(img, (x1, y1 + radius), (x2, y2 - radius), color, -1)
+        for cx, cy in [(x1+radius, y1+radius), (x2-radius, y1+radius),
+                       (x1+radius, y2-radius), (x2-radius, y2-radius)]:
+            cv2.circle(img, (cx, cy), radius, color, -1)
+    else:
+        cv2.rectangle(img, pt1, pt2, color, thickness, lineType=cv2.LINE_AA)
+
+
+# ── Chargement image ──────────────────────────────────────────────────────────
+
+def load_cover_image(path, blur_radius, zoom, width=WIDTH, height=HEIGHT):
+    img = Image.open(path).convert("RGB")
+    bg = img.copy()
+
+    src_w, src_h = bg.size
+    target_ratio = width / height
+    src_ratio = src_w / src_h
+
+    if src_ratio > target_ratio:
+        new_w = int(src_h * target_ratio)
+        left = (src_w - new_w) // 2
+        bg = bg.crop((left, 0, left + new_w, src_h))
+    else:
+        new_h = int(src_w / target_ratio)
+        top = (src_h - new_h) // 2
+        bg = bg.crop((0, top, src_w, top + new_h))
+
+    bg = bg.resize((width, height), Image.LANCZOS)
+    if blur_radius > 0:
+        bg = bg.filter(ImageFilter.GaussianBlur(blur_radius))
+    bg = ImageEnhance.Brightness(bg).enhance(0.16)
+    bg = ImageEnhance.Contrast(bg).enhance(1.25)
+    bg_arr = cv2.cvtColor(np.array(bg), cv2.COLOR_RGB2BGR)
+    bg_arr = cv2.addWeighted(bg_arr, 0.50, np.zeros_like(bg_arr), 0.50, 0)
+
+    # Pochette plus grande en mode vertical
+    is_vertical = height > width
+    zoom_factor = 0.60 if is_vertical else 0.53
+    max_side = int(min(width, height) * zoom_factor * zoom)
+    cover = img.copy()
+    cover.thumbnail((max_side, max_side), Image.LANCZOS)
+    cover_arr = cv2.cvtColor(np.array(cover), cv2.COLOR_RGB2BGR)
+
+    return bg_arr, cover_arr
+
+
+# ── Dessin éléments ───────────────────────────────────────────────────────────
+
+def draw_vignette(frame):
+    h, w = frame.shape[:2]
+    frame[:] = (frame.astype(np.float32) * _get_vignette(w, h)).astype(np.uint8)
+
+
+def overlay_center(base, overlay, bass, kick, pulse_strength, is_vertical=False):
+    height, width = base.shape[:2]
+    h, w = overlay.shape[:2]
+    x = (width - w) // 2
+    pulse = int((8 + bass * 20 * pulse_strength + kick * 35 * pulse_strength) * (width / WIDTH))
+
+    if is_vertical:
+        # En mode SHORT : pochette dans le tiers supérieur
+        y = int(height * 0.12)
+    else:
+        y = (height - h) // 2 - int(height * 0.09)
+
+    glow = np.zeros_like(base)
+    rounded_rectangle(glow, (x - pulse, y - pulse), (x + w + pulse, y + h + pulse), 24, (150, 150, 150), -1)
+    glow = cv2.GaussianBlur(glow, (91, 91), 0)
+    cv2.addWeighted(glow, 0.38, base, 1.0, 0, base)
+
+    pad = max(6, int(18 * width / WIDTH))
+    rounded_rectangle(base, (x - pad, y - pad), (x + w + pad, y + h + pad), 18, (0, 0, 0), -1)
+    rounded_rectangle(base, (x - pad, y - pad), (x + w + pad, y + h + pad), 18, (238, 238, 238), 2)
+    base[y:y + h, x:x + w] = overlay
+
+
+def draw_reactive_text(frame, text, rms, kick, text_x=0.50, text_y=0.70):
+    if not text.strip():
+        return
+
+    height, width = frame.shape[:2]
+    scale = width / WIDTH
+    font_size = max(18, int(56 * scale * (1.0 + kick * 0.10 + rms * 0.025)))
+    font = safe_font(font_size, bold=True)
+
+    img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+    layer = Image.new("RGBA", img.size, (0, 0, 0, 0))
+    draw = ImageDraw.Draw(layer)
+
+    max_width = int(width * 0.78)
+    words = text.strip().split()
+    lines, current = [], ""
+
+    for word in words:
+        test = (current + " " + word).strip()
+        bbox = draw.textbbox((0, 0), test, font=font)
+        if bbox[2] - bbox[0] <= max_width or not current:
+            current = test
+        else:
+            lines.append(current)
+            current = word
+    if current:
+        lines.append(current)
+    lines = lines[:2]
+
+    line_h = int(font_size * 1.16)
+    y = int(height * text_y) - len(lines) * line_h // 2
+    text_alpha = int(min(255, 210 + kick * 45))
+
+    for idx, line in enumerate(lines):
+        bbox = draw.textbbox((0, 0), line, font=font)
+        tw = bbox[2] - bbox[0]
+        x = int(width * text_x - tw / 2)
+        yy = y + idx * line_h
+
+        for ox, oy, alpha in [(-4, -4, 70), (4, -4, 70), (-4, 4, 70), (4, 4, 70)]:
+            draw.text((x + ox, yy + oy), line, font=font, fill=(0, 0, 0, alpha))
+        draw.text((x, yy), line, font=font, fill=(255, 255, 255, text_alpha))
+
+    img = Image.alpha_composite(img.convert("RGBA"), layer)
+    frame[:] = cv2.cvtColor(np.array(img.convert("RGB")), cv2.COLOR_RGB2BGR)
+
+
+def spectrum_bands(spec_frame, bar_count=84):
+    bins = len(spec_frame)
+    idx = np.geomspace(1, bins, bar_count + 1).astype(int) - 1
+    idx = np.clip(idx, 0, bins - 1)
+    starts, ends = idx[:-1], np.maximum(idx[1:], idx[:-1] + 1)
+    vals = np.array([spec_frame[s:e].mean() for s, e in zip(starts, ends)], dtype=np.float32)
+    return np.clip(np.power(vals, 1.55), 0.0, 1.0)
+
+
+# ── Spectres ──────────────────────────────────────────────────────────────────
+
+def _spectrum_geometry(settings: RenderSettings, height: int, width: int):
+    """Calcule base_y, max_w, gap, bar_count, bar_w, total_w, start_x selon format."""
+    is_v = settings.is_vertical
+
+    # En mode SHORT, repositionner le spectre dans la zone basse
+    eff_y = settings.spectrum_y
+    if is_v:
+        eff_y = max(eff_y, 0.72)  # Jamais plus haut que 72% en vertical
+
+    base_y = int(height * eff_y)
+    max_w = int(width * (0.86 if is_v else 0.74))
+    gap = max(2, int(7 * width / WIDTH))
+    bar_count = len(settings._bands_cache) if hasattr(settings, "_bands_cache") else 84
+    bar_w = max(2, int((max_w - gap * (bar_count - 1)) / bar_count))
+    total_w = bar_count * bar_w + (bar_count - 1) * gap
+    start_x = width // 2 - total_w // 2
+    return base_y, max_w, gap, bar_count, bar_w, total_w, start_x
+
+
+def draw_spectrum(frame, bands, rms, bass, mid, high, settings: RenderSettings):
+    height, width = frame.shape[:2]
+    is_v = settings.is_vertical
+
+    eff_y = max(settings.spectrum_y, 0.72) if is_v else settings.spectrum_y
+    base_y = int(height * eff_y)
+    max_w = int(width * (0.86 if is_v else 0.74))
+    gap = max(2, int(7 * width / WIDTH))
+    bar_count = len(bands)
+    bar_w = max(2, int((max_w - gap * (bar_count - 1)) / bar_count))
+    total_w = bar_count * bar_w + (bar_count - 1) * gap
+    start_x = width // 2 - total_w // 2
+    size = settings.spectrum_size
+
+    style = settings.spectrum_style
+
+    # ── Barres premium ────────────────────────────────────────────────────────
+    if style == "Barres premium":
+        for i, value in enumerate(bands):
+            x1 = start_x + i * (bar_w + gap)
+            x2 = x1 + bar_w
+            h = int((height * 0.025 + value * height * 0.21 * size) * (0.82 + bass * 0.45 + rms * 0.2))
+            bright = int(np.clip(105 + value * 150 + high * 55, 110, 255))
+            rounded_rectangle(frame, (x1, base_y - h), (x2, base_y), max(1, bar_w // 2), (bright, bright, bright), -1)
+        cv2.line(frame, (start_x, base_y + int(height * 0.022)),
+                 (start_x + total_w, base_y + int(height * 0.022)),
+                 (245, 245, 245), max(1, int(1 + bass * 5)), lineType=cv2.LINE_AA)
+
+    # ── Barres néon (NEW) ─────────────────────────────────────────────────────
+    elif style == "Barres néon":
+        glow_layer = np.zeros_like(frame)
+        for i, value in enumerate(bands):
+            x1 = start_x + i * (bar_w + gap)
+            x2 = x1 + bar_w
+            h = int((height * 0.025 + value * height * 0.21 * size) * (0.82 + bass * 0.45 + rms * 0.2))
+            if h <= 0:
+                continue
+            # Dégradé de couleur : bas=chaud, haut=froid
+            t = min(1.0, float(i) / bar_count)  # 0=gauche(bass) 1=droite(high)
+            r = int(255 * (1.0 - t * 0.6))
+            g = int(80 + 120 * t)
+            b = int(60 + 195 * t)
+            bright = int(np.clip(0.6 + value * 0.4, 0, 1) * 255)
+            color = (int(b * bright / 255), int(g * bright / 255), int(r * bright / 255))
+            rounded_rectangle(frame, (x1, base_y - h), (x2, base_y), max(1, bar_w // 2), color, -1)
+            # Glow : même barre plus épaisse sur layer séparé
+            glow_color = (min(255, b), min(255, g), min(255, r))
+            rounded_rectangle(glow_layer, (x1 - 2, base_y - h - 4), (x2 + 2, base_y), max(1, bar_w // 2 + 2), glow_color, -1)
+        # Blur du glow + blend additif
+        blur_k = 15 | 1
+        glow_layer = cv2.GaussianBlur(glow_layer, (blur_k, blur_k), 0)
+        cv2.addWeighted(glow_layer, 0.55, frame, 1.0, 0, frame)
+
+    # ── Symétrie miroir (NEW) ─────────────────────────────────────────────────
+    elif style == "Symétrie miroir":
+        center_y = base_y - int(height * 0.04)
+        for i, value in enumerate(bands):
+            x1 = start_x + i * (bar_w + gap)
+            x2 = x1 + bar_w
+            h_half = int((height * 0.015 + value * height * 0.13 * size) * (0.85 + bass * 0.55))
+            bright = int(np.clip(115 + value * 140 + high * 55, 120, 255))
+            # Barre du haut
+            rounded_rectangle(frame, (x1, center_y - h_half), (x2, center_y), max(1, bar_w // 2), (bright, bright, bright), -1)
+            # Barre du bas (miroir, légèrement atténuée)
+            faded = int(bright * 0.65)
+            rounded_rectangle(frame, (x1, center_y), (x2, center_y + h_half), max(1, bar_w // 2), (faded, faded, faded), -1)
+        # Ligne centrale
+        cv2.line(frame, (start_x, center_y), (start_x + total_w, center_y),
+                 (255, 255, 255), max(1, int(1.5 + bass * 4)), lineType=cv2.LINE_AA)
+
+    # ── Arc plasma (NEW) ──────────────────────────────────────────────────────
+    elif style == "Arc plasma":
+        _draw_arc_plasma(frame, bands, bass, kick=0.0, settings=settings, base_y=base_y, width=width, height=height, size=size)
+
+    # ── Onde plasma (NEW) ─────────────────────────────────────────────────────
+    elif style == "Onde plasma":
+        _draw_onde_plasma(frame, bands, rms, bass, mid, high, base_y, start_x, total_w, bar_w, gap, height, width, size)
+
+    # ── Waveform miroir (original) ────────────────────────────────────────────
+    elif style == "Waveform miroir":
+        center_y = base_y - int(height * 0.08)
+        for i, value in enumerate(bands):
+            x1 = start_x + i * (bar_w + gap)
+            x2 = x1 + bar_w
+            h = int((height * 0.012 + value * height * 0.12 * size) * (0.85 + bass * 0.55))
+            bright = int(np.clip(105 + value * 150 + high * 55, 110, 255))
+            rounded_rectangle(frame, (x1, center_y - h), (x2, center_y + h), max(1, bar_w // 2), (bright, bright, bright), -1)
+
+    # ── Ligne fine (original) ─────────────────────────────────────────────────
+    elif style == "Ligne fine":
+        pts = []
+        for i, value in enumerate(bands):
+            x = start_x + i * (bar_w + gap)
+            y = base_y - int(value * height * 0.18 * size * (0.8 + mid * 0.4))
+            pts.append((x, y))
+        for i in range(len(pts) - 1):
+            cv2.line(frame, pts[i], pts[i + 1], (235, 235, 235),
+                     max(1, int(2 * width / WIDTH)), lineType=cv2.LINE_AA)
+
+
+def _draw_arc_plasma(frame, bands, bass, kick, settings, base_y, width, height, size):
+    """Demi-cercle plasma au bas du cadre. Adapté automatiquement au format vertical."""
+    n = min(len(bands), 96)
+    sample = np.interp(np.linspace(0, len(bands) - 1, n), np.arange(len(bands)), bands)
+
+    cx = width // 2
+    cy = base_y + int(height * 0.05)
+
+    # Rayon adapté à la largeur disponible
+    radius = int(width * 0.32 * size + kick * 8)
+
+    glow_layer = np.zeros_like(frame)
+
+    for i, value in enumerate(sample):
+        # Arc de -π à 0 (demi-cercle supérieur, ouverture vers le bas)
+        angle = math.pi + (i / (n - 1)) * math.pi
+        bar_len = int(8 + value * height * 0.09 * size + bass * 18)
+
+        x1 = int(cx + math.cos(angle) * radius)
+        y1 = int(cy + math.sin(angle) * radius)
+        x2 = int(cx + math.cos(angle) * (radius + bar_len))
+        y2 = int(cy + math.sin(angle) * (radius + bar_len))
+
+        t = float(i) / n
+        r = int(255 * (1.0 - t * 0.5))
+        g = int(60 + 140 * t)
+        b = int(80 + 175 * t)
+        bright = int(np.clip(0.5 + value * 0.5, 0, 1))
+        color = (int(b * (0.5 + bright * 0.5)), int(g * (0.5 + bright * 0.5)), int(r * (0.5 + bright * 0.5)))
+        glow_color = (min(255, b), min(255, g), min(255, r))
+
+        lw = max(1, int(3 * width / WIDTH))
+        cv2.line(frame, (x1, y1), (x2, y2), color, lw, lineType=cv2.LINE_AA)
+        cv2.line(glow_layer, (x1, y1), (x2, y2), glow_color, lw + 4, lineType=cv2.LINE_AA)
+
+    # Cercle de référence
+    bright_ring = int(np.clip(60 + bass * 80, 60, 140))
+    cv2.circle(frame, (cx, cy), radius, (bright_ring, bright_ring, bright_ring),
+               max(1, int(1.5 * width / WIDTH)), lineType=cv2.LINE_AA)
+
+    blur_k = (31 | 1)
+    glow_layer = cv2.GaussianBlur(glow_layer, (blur_k, blur_k), 0)
+    cv2.addWeighted(glow_layer, 0.6, frame, 1.0, 0, frame)
+
+
+def _draw_onde_plasma(frame, bands, rms, bass, mid, high, base_y, start_x, total_w, bar_w, gap, height, width, size):
+    """Waveform épaisse avec halo lumineux coloré."""
+    n = len(bands)
+    glow_layer = np.zeros_like(frame)
+
+    pts_main = []
+    pts_mirror = []
+
+    for i, value in enumerate(bands):
+        x = start_x + i * (bar_w + gap)
+        amplitude = int(value * height * 0.16 * size * (0.85 + bass * 0.5))
+        pts_main.append((x, base_y - amplitude))
+        pts_mirror.append((x, base_y + int(amplitude * 0.4)))
+
+    # Onde principale avec épaisseur variable
+    for i in range(len(pts_main) - 1):
+        val = float(bands[i])
+        t = float(i) / n
+        r = int(200 + 55 * (1.0 - t))
+        g = int(100 + 100 * t)
+        b = int(50 + 200 * t)
+        lw_main = max(2, int((2 + val * 5) * width / WIDTH))
+        lw_glow = lw_main + 8
+        cv2.line(frame, pts_main[i], pts_main[i + 1], (b // 2, g // 2, r // 2), lw_main, lineType=cv2.LINE_AA)
+        cv2.line(glow_layer, pts_main[i], pts_main[i + 1], (b, g, r), lw_glow, lineType=cv2.LINE_AA)
+
+    # Reflet atténué en bas
+    for i in range(len(pts_mirror) - 1):
+        bright = int(np.clip(80 + bands[i] * 80, 60, 160))
+        cv2.line(frame, pts_mirror[i], pts_mirror[i + 1], (bright // 3, bright // 3, bright // 3),
+                 max(1, int(1.5 * width / WIDTH)), lineType=cv2.LINE_AA)
+
+    blur_k = (25 | 1)
+    glow_layer = cv2.GaussianBlur(glow_layer, (blur_k, blur_k), 0)
+    cv2.addWeighted(glow_layer, 0.65, frame, 1.0, 0, frame)
+
+
+def draw_audio_orb(frame, bands, bass, kick, settings: RenderSettings):
+    if settings.spectrum_style not in ("Cercle radial", "Cercle + barres"):
+        return
+
+    height, width = frame.shape[:2]
+    is_v = settings.is_vertical
+
+    if is_v:
+        # En SHORT : orbe plus haut, sous la pochette
+        center = (width // 2, int(height * 0.58))
+    else:
+        center = (width // 2, height // 2 - int(height * 0.09))
+
+    radius = int(min(width, height) * 0.36 + kick * 12)
+    n = min(len(bands), 112)
+    sample = np.interp(np.linspace(0, len(bands) - 1, n), np.arange(len(bands)), bands)
+
+    for i, value in enumerate(sample):
+        angle = (i / n) * math.tau - math.pi / 2
+        length = int(6 + value * height * 0.082 * settings.spectrum_size + bass * 12 + kick * 16)
+        x1 = int(center[0] + math.cos(angle) * radius)
+        y1 = int(center[1] + math.sin(angle) * radius)
+        x2 = int(center[0] + math.cos(angle) * (radius + length))
+        y2 = int(center[1] + math.sin(angle) * (radius + length))
+        bright = int(np.clip(92 + value * 160 + bass * 40 + kick * 45, 105, 255))
+        cv2.line(frame, (x1, y1), (x2, y2), (bright, bright, bright),
+                 max(1, int(2 * width / WIDTH)), lineType=cv2.LINE_AA)
+
+
+def draw_music_linked_particles(frame, particles, high, kick, settings: RenderSettings):
+    preset = PARTICLE_PRESETS[settings.particle_preset]
+    if preset["count"] <= 0:
+        particles.clear()
+        return particles
+
+    height, width = frame.shape[:2]
+    target_count = int(preset["count"] * (width / WIDTH) ** 0.5)
+
+    while len(particles) < target_count:
+        particles.append(FloatingParticle(width, height, settings.particle_preset))
+    if len(particles) > target_count:
+        del particles[target_count:]
+
+    layer = np.zeros_like(frame)
+    for p in particles:
+        p.update(high, kick, preset)
+        p.draw(layer, high, kick, preset, width / WIDTH)
+
+    layer = cv2.GaussianBlur(layer, (3, 3), 0)
+    cv2.addWeighted(layer, 0.72, frame, 1.0, 0, frame)
+    return particles
+
+
+def draw_smoke(frame, smoke_blobs, bass, kick, settings: RenderSettings):
+    preset = SMOKE_PRESETS[settings.smoke_preset]
+    if preset["density"] <= 0:
+        smoke_blobs.clear()
+        return smoke_blobs
+
+    height, width = frame.shape[:2]
+    target = int(18 * preset["density"] * (width / WIDTH) ** 0.5)
+
+    while len(smoke_blobs) < target:
+        smoke_blobs.append(SmokeBlob(width, height))
+    if len(smoke_blobs) > target:
+        del smoke_blobs[target:]
+
+    layer = np.zeros_like(frame)
+    for blob in smoke_blobs:
+        blob.update(bass, kick, preset)
+        if settings.smoke_color == "Reggae":
+            rgb = REGGAE_PALETTE[blob.color_index % len(REGGAE_PALETTE)]
+        else:
+            rgb = SMOKE_COLORS.get(settings.smoke_color, SMOKE_COLORS["Blanc"])
+        color_bgr = (rgb[2], rgb[1], rgb[0])
+        blob.draw(layer, color_bgr, bass, kick, preset)
+
+    blur = preset["blur"] | 1
+    if blur > 0:
+        layer = cv2.GaussianBlur(layer, (blur, blur), 0)
+
+    cv2.addWeighted(layer, 0.82, frame, 1.0, 0, frame)
+    return smoke_blobs
+
+
+# ── Rendu complet d'une frame ─────────────────────────────────────────────────
+
+def render_frame(bg, cover, particles, smoke_blobs, spec_frame, metrics,
+                 smoothed_bands, title, settings: RenderSettings):
+    frame = bg.copy()
+    is_v = settings.is_vertical
+
+    rms  = metrics["rms"]
+    bass = metrics["bass"]
+    mid  = metrics["mid"]
+    high = metrics["high"]
+    kick = metrics["kick"]
+
+    particles   = draw_music_linked_particles(frame, particles, high, kick, settings)
+    smoke_blobs = draw_smoke(frame, smoke_blobs, bass, kick, settings)
+
+    bands = spectrum_bands(spec_frame, 84)
+    smoothed_bands[:] = smoothed_bands * 0.76 + bands * 0.24
+
+    draw_audio_orb(frame, smoothed_bands, bass, kick, settings)
+
+    # Pochette : positionnée selon l'orientation
+    overlay_center(frame, cover, bass, kick, settings.pulse_strength, is_vertical=is_v)
+
+    # Texte : adapté pour SHORT (entre pochette et spectre)
+    eff_text_y = settings.text_y
+    if is_v:
+        eff_text_y = 0.60  # Zone entre pochette (haut) et spectre (bas)
+
+    draw_reactive_text(frame, title, rms, kick, settings.text_x, eff_text_y)
+
+    if settings.spectrum_style != "Cercle radial":
+        draw_spectrum(frame, smoothed_bands, rms, bass, mid, high, settings)
+
+    draw_vignette(frame)
+    return frame, particles, smoke_blobs, smoothed_bands
