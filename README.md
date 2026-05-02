@@ -54,7 +54,7 @@ Conçu pour les producteurs, beatmakers et artistes qui veulent un rendu profess
 
 <div align="center">
 
-![Interface principale TAC MP4 Studio](https://i.imgur.com/UySZIl3.png)
+![Interface principale TAC MP4 Studio](https://i.imgur.com/h5l3yQg.png)
 
 *Éditeur complet — waveform interactive · preview live · 5 onglets de réglages*
 
@@ -136,7 +136,7 @@ Tous les styles supportent la **couleur personnalisée** ou l'extraction automat
 
 <div align="center">
 
-![Pochette sleeve + disque vinyle rotatif](https://i.imgur.com/1pbUmB7.png)
+![Pochette sleeve + disque vinyle rotatif](https://i.imgur.com/nRXXVRs.png)
 
 *Pochette sleeve au premier plan · vinyle rotatif à droite · réactif aux beats*
 
