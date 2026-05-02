@@ -141,48 +141,90 @@ def overlay_center(base, overlay, bass, kick, pulse_strength, is_vertical=False)
     base[y:y + h, x:x + w] = overlay
 
 
-def draw_reactive_text(frame, text, rms, kick, text_x=0.50, text_y=0.70):
-    if not text.strip():
+def _draw_text_line(draw, text, font, x_center, y, alpha, shadow_offset=4):
+    """Dessine une ligne de texte centrée avec ombre diagonale."""
+    bbox = draw.textbbox((0, 0), text, font=font)
+    tw = bbox[2] - bbox[0]
+    x = int(x_center - tw / 2)
+    for ox, oy, a in [(-shadow_offset, -shadow_offset, 60),
+                      ( shadow_offset, -shadow_offset, 60),
+                      (-shadow_offset,  shadow_offset, 60),
+                      ( shadow_offset,  shadow_offset, 60)]:
+        draw.text((x + ox, y + oy), text, font=font, fill=(0, 0, 0, a))
+    draw.text((x, y), text, font=font, fill=(255, 255, 255, alpha))
+
+
+def draw_reactive_text(frame, title, rms, kick, text_x=0.50, text_y=0.70, artist=""):
+    """Rend le texte artiste + titre sur la frame.
+
+    Update 2 : artiste et titre sont deux champs séparés avec tailles différentes.
+    - Artiste : plus grand, bold, couleur pleine
+    - Titre   : légèrement plus petit, style régulier, légèrement atténué
+    - Si artiste vide : affichage titre seul (comportement original)
+    """
+    has_artist = bool(artist.strip())
+    has_title  = bool(title.strip())
+
+    if not has_artist and not has_title:
         return
 
     height, width = frame.shape[:2]
     scale = width / WIDTH
-    font_size = max(18, int(56 * scale * (1.0 + kick * 0.10 + rms * 0.025)))
-    font = safe_font(font_size, bold=True)
+    kick_boost = 1.0 + kick * 0.10 + rms * 0.025
+
+    artist_size = max(16, int(62 * scale * kick_boost))
+    title_size  = max(14, int(44 * scale * kick_boost))
+
+    font_artist = safe_font(artist_size, bold=True)
+    font_title  = safe_font(title_size,  bold=False)
 
     img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
     layer = Image.new("RGBA", img.size, (0, 0, 0, 0))
     draw = ImageDraw.Draw(layer)
 
-    max_width = int(width * 0.78)
-    words = text.strip().split()
-    lines, current = [], ""
-
-    for word in words:
-        test = (current + " " + word).strip()
-        bbox = draw.textbbox((0, 0), test, font=font)
-        if bbox[2] - bbox[0] <= max_width or not current:
-            current = test
-        else:
-            lines.append(current)
-            current = word
-    if current:
-        lines.append(current)
-    lines = lines[:2]
-
-    line_h = int(font_size * 1.16)
-    y = int(height * text_y) - len(lines) * line_h // 2
+    cx = width * text_x
+    base_y = int(height * text_y)
     text_alpha = int(min(255, 210 + kick * 45))
+    title_alpha = int(text_alpha * 0.82)
+    spacing = int(artist_size * 1.25)
 
-    for idx, line in enumerate(lines):
-        bbox = draw.textbbox((0, 0), line, font=font)
-        tw = bbox[2] - bbox[0]
-        x = int(width * text_x - tw / 2)
-        yy = y + idx * line_h
+    if has_artist and has_title:
+        # Centrer le bloc artiste+titre autour de base_y
+        total_h = spacing + title_size
+        y_artist = base_y - total_h // 2
+        y_title  = y_artist + spacing
+        _draw_text_line(draw, artist.strip(), font_artist, cx, y_artist, text_alpha)
+        # Ligne de séparation fine entre artiste et titre
+        sep_y = y_artist + int(spacing * 0.78)
+        sep_w = int(width * 0.08)
+        draw.rectangle([(int(cx - sep_w), sep_y), (int(cx + sep_w), sep_y + 1)],
+                       fill=(255, 255, 255, 80))
+        _draw_text_line(draw, title.strip(), font_title, cx, y_title, title_alpha)
 
-        for ox, oy, alpha in [(-4, -4, 70), (4, -4, 70), (-4, 4, 70), (4, 4, 70)]:
-            draw.text((x + ox, yy + oy), line, font=font, fill=(0, 0, 0, alpha))
-        draw.text((x, yy), line, font=font, fill=(255, 255, 255, text_alpha))
+    elif has_artist:
+        y = base_y - artist_size // 2
+        _draw_text_line(draw, artist.strip(), font_artist, cx, y, text_alpha)
+
+    else:
+        # Titre seul — même comportement qu'avant avec wrapping
+        max_width = int(width * 0.78)
+        words = title.strip().split()
+        lines, current = [], ""
+        for word in words:
+            test = (current + " " + word).strip()
+            bbox = draw.textbbox((0, 0), test, font=font_title)
+            if bbox[2] - bbox[0] <= max_width or not current:
+                current = test
+            else:
+                lines.append(current)
+                current = word
+        if current:
+            lines.append(current)
+        lines = lines[:2]
+        lh = int(title_size * 1.16)
+        y = base_y - len(lines) * lh // 2
+        for i, line in enumerate(lines):
+            _draw_text_line(draw, line, font_title, cx, y + i * lh, title_alpha)
 
     img = Image.alpha_composite(img.convert("RGBA"), layer)
     frame[:] = cv2.cvtColor(np.array(img.convert("RGB")), cv2.COLOR_RGB2BGR)
@@ -488,7 +530,7 @@ def draw_smoke(frame, smoke_blobs, bass, kick, settings: RenderSettings):
 # ── Rendu complet d'une frame ─────────────────────────────────────────────────
 
 def render_frame(bg, cover, particles, smoke_blobs, spec_frame, metrics,
-                 smoothed_bands, title, settings: RenderSettings):
+                 smoothed_bands, settings: RenderSettings):
     frame = bg.copy()
     is_v = settings.is_vertical
 
@@ -514,7 +556,9 @@ def render_frame(bg, cover, particles, smoke_blobs, spec_frame, metrics,
     if is_v:
         eff_text_y = 0.60  # Zone entre pochette (haut) et spectre (bas)
 
-    draw_reactive_text(frame, title, rms, kick, settings.text_x, eff_text_y)
+    draw_reactive_text(frame, settings.title_text, rms, kick,
+                       settings.text_x, eff_text_y,
+                       artist=settings.artist_text)
 
     if settings.spectrum_style != "Cercle radial":
         draw_spectrum(frame, smoothed_bands, rms, bass, mid, high, settings)

@@ -187,7 +187,6 @@ def render_video(
                 features["spec"][:, i],
                 metrics,
                 smoothed,
-                settings.title_text,
                 settings,
             )
 

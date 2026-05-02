@@ -1,24 +1,20 @@
-"""Modèles de données du projet."""
+"""Modèles de données du projet — Update 2 : ajout artist_text."""
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from app.presets import WIDTH, HEIGHT
 
 
 @dataclass
 class RenderSettings:
-    """Paramètres complets d'un rendu vidéo.
-
-    Toutes les valeurs nécessaires au renderer et à l'exporter sont ici.
-    Cela évite de passer des dizaines d'arguments en cascade.
-    """
     audio_path: str
     image_path: str
     output_path: str
     title_text: str
-    duration_limit: float | None  # None = audio entier
-    start_offset: float           # Secondes de départ dans l'audio
+    artist_text: str           # Update 2 — champ artiste séparé
+    duration_limit: float | None
+    start_offset: float
 
     # Visuels
     particle_preset: str
@@ -41,5 +37,4 @@ class RenderSettings:
 
     @property
     def is_vertical(self) -> bool:
-        """True si le rendu est au format vertical (SHORT)."""
         return self.output_height > self.output_width
