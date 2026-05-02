@@ -88,7 +88,7 @@ Conçu pour les producteurs, beatmakers et artistes qui veulent un rendu profess
 
 <div align="center">
 
-![Format SHORT vertical 1080x1920](https://i.imgur.com/qJlMsaH.png)
+![Format SHORT vertical 1080x1920](https://i.imgur.com/QKm14cz.png)
 
 *Format 1080×1920 — milieu automatique du son · Reels · TikTok · YouTube Shorts*
 
@@ -136,7 +136,7 @@ Tous les styles supportent la **couleur personnalisée** ou l'extraction automat
 
 <div align="center">
 
-![Pochette sleeve + disque vinyle rotatif](https://i.imgur.com/FIx4Hzo.png)
+![Pochette sleeve + disque vinyle rotatif](https://i.imgur.com/1pbUmB7.png)
 
 *Pochette sleeve au premier plan · vinyle rotatif à droite · réactif aux beats*
 
