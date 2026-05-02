@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://i.imgur.com/fByY54g.png" width="120" alt="TAC MP4 Studio Logo"/>
+<img src="img/tac.png" width="120" alt="TAC MP4 Studio Logo"/>
 
 # TAC MP4 Studio
 
