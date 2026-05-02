@@ -153,6 +153,30 @@ Deux champs distincts dans le panneau texte. Sur la vidéo, l'artiste s'affiche 
 
 ---
 
+---
+
+## 🆚 Alternative gratuite à Tuneform
+
+TAC MP4 Studio est une **alternative open source et gratuite à [Tuneform](https://tuneform.com)** — le générateur de vidéos musicales réactives en ligne.
+
+L'objectif n'est pas de le concurrencer ou de faire mieux. C'est un outil pensé pour mes propres besoins, que je partage librement. Si Tuneform correspond à ce que tu cherches, vas-y. Si tu veux quelque chose de **gratuit, local, sans abonnement, sans upload de tes fichiers sur un serveur**, TAC MP4 Studio est fait pour ça.
+
+**Ce que TAC propose que Tuneform ne fait pas :**
+- 100% offline — tes fichiers ne quittent pas ton PC
+- Open source — modifiable à volonté
+- Gratuit sans limite de durée ni de rendu
+
+**Ce que Tuneform fait mieux pour l'instant :**
+- Interface web sans installation
+- Plus de templates et d'effets
+- Rendu cloud plus rapide sur petites machines
+
+Le projet est développé en **Python** (OpenCV · librosa · CustomTkinter · FFmpeg). C'est le bon choix pour prototyper vite et rester accessible. Si l'outil devient utile à un plus grand nombre, je n'exclus pas de migrer vers une stack plus performante ou multiplateforme — mais pour l'instant Python fait le job.
+
+> Tu utilises TAC et tu as des idées d'amélioration ? Ouvre une issue ou une PR — toutes les contributions sont les bienvenues.
+
+---
+
 ## 📦 Installation
 
 ### 1. Prérequis
