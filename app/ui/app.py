@@ -141,6 +141,10 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
         self.gradient_top    = settings.get("gradient_top",    "#1a1a2e")
         self.gradient_bottom = settings.get("gradient_bottom", "#0f3460")
 
+        # Update 4 — disque vinyle
+        self.vinyl_mode  = tk.BooleanVar(value=bool(settings.get("vinyl_mode", False)))
+        self.vinyl_angle: float = 0.0
+
         # ── Preview state ──────────────────────────────────────────────────────
         self.preview_is_vertical  = False
         self.preview_ready        = False
@@ -258,11 +262,12 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
         metrics = {k: float(self.preview_features[k][i])
                    for k in ("rms", "kick", "bass", "mid", "high")}
 
-        frame, _, _, _ = render_frame(
+        frame, _, _, _, _ = render_frame(
             self.preview_bg, self.preview_cover,
             [], [],
             self.preview_features["spec"][:, i],
             metrics, self.preview_smoothed.copy(), settings,
+            self.vinyl_angle,
         )
 
         try:
@@ -744,6 +749,19 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
         _sep(ai)
         self._slider_row(ai, "Taille image", self.image_zoom,     0.65, 1.35)
         self._slider_row(ai, "Pulse image",  self.pulse_strength, 0.0,  2.2)
+        _sep(ai)
+
+        # ── Disque vinyle toggle (Update 4) ───────────────────────────────
+        vinyl_row = ctk.CTkFrame(ai, fg_color="transparent")
+        vinyl_row.pack(fill="x", pady=(8, 4))
+        ctk.CTkLabel(vinyl_row, text="🎵  Disque vinyle", text_color=TEXT,
+                     font=FONT_H2, anchor="w").pack(side="left")
+        ctk.CTkSwitch(vinyl_row, text="", variable=self.vinyl_mode,
+                      command=self._on_setting_changed,
+                      progress_color=ACCENT, button_color=ACCLT,
+                      button_hover_color=ACCENT, width=44, height=22).pack(side="right")
+        ctk.CTkLabel(ai, text="Pochette circulaire rotative réactive aux beats",
+                     text_color=MUTED, font=FONT_MU, anchor="w").pack(anchor="w", pady=(0, 4))
 
         # ── Fond dégradé (Update 3 — Feature 1) ───────────────────────────
         self._section_title(r, "🎨  Fond")
@@ -984,6 +1002,7 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
             "bg_mode":          self.bg_mode.get(),
             "gradient_top":     self.gradient_top,
             "gradient_bottom":  self.gradient_bottom,
+            "vinyl_mode":       bool(self.vinyl_mode.get()),
         }
         save_config(self.config_data)
 
@@ -1092,6 +1111,7 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
             bg_mode=self.bg_mode.get(),
             gradient_top=self.gradient_top,
             gradient_bottom=self.gradient_bottom,
+            vinyl_mode=bool(self.vinyl_mode.get()),
         )
 
     # ══════════════════════════════════════════════════════════════════════════
@@ -1153,6 +1173,7 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
             self.preview_particles = []
             self.preview_smoke     = []
             self.preview_smoothed  = np.zeros(84, dtype=np.float32)
+            self.vinyl_angle       = 0.0
         except Exception:
             pass
 
@@ -1170,11 +1191,12 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
         metrics = {k: float(self.preview_features[k][i])
                    for k in ("rms", "kick", "bass", "mid", "high")}
 
-        frame, self.preview_particles, self.preview_smoke, self.preview_smoothed = render_frame(
+        frame, self.preview_particles, self.preview_smoke, self.preview_smoothed, self.vinyl_angle = render_frame(
             self.preview_bg, self.preview_cover,
             self.preview_particles, self.preview_smoke,
             self.preview_features["spec"][:, i],
             metrics, self.preview_smoothed, s,
+            self.vinyl_angle,
         )
 
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
