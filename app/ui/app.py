@@ -143,7 +143,13 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
 
         # Update 4 — disque vinyle
         self.vinyl_mode  = tk.BooleanVar(value=bool(settings.get("vinyl_mode", False)))
+        self.vinyl_black = tk.BooleanVar(value=bool(settings.get("vinyl_black", False)))
         self.vinyl_angle: float = 0.0
+
+        # Update 5 — couleur spectre + fond flottant
+        self.spectrum_color     = settings.get("spectrum_color", "#ffffff")
+        self.spectrum_color_auto = tk.BooleanVar(value=bool(settings.get("spectrum_color_auto", False)))
+        self.floating_bg        = tk.BooleanVar(value=bool(settings.get("floating_bg", False)))
 
         # ── Preview state ──────────────────────────────────────────────────────
         self.preview_is_vertical  = False
@@ -262,12 +268,15 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
         metrics = {k: float(self.preview_features[k][i])
                    for k in ("rms", "kick", "bass", "mid", "high")}
 
+        raw_f = self.preview_features["raw"][i] if "raw" in self.preview_features else None
         frame, _, _, _, _ = render_frame(
             self.preview_bg, self.preview_cover,
             [], [],
             self.preview_features["spec"][:, i],
             metrics, self.preview_smoothed.copy(), settings,
             self.vinyl_angle,
+            frame_idx=i,
+            raw_frame=raw_f,
         )
 
         try:
@@ -629,7 +638,7 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
 
         left = ctk.CTkFrame(self.main, fg_color=BG)
         left.pack(side="left", fill="both", expand=True, padx=(16, 8), pady=16)
-        right_outer = ctk.CTkFrame(self.main, fg_color=BG, width=340)
+        right_outer = ctk.CTkFrame(self.main, fg_color=BG, width=380)
         right_outer.pack(side="right", fill="y", padx=(0, 16), pady=16)
         right_outer.pack_propagate(False)
 
@@ -675,165 +684,197 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
         _btn(ctrl, "← Accueil", self.show_home,
              width=100, height=34, small=True).pack(side="right")
 
-        # Panneau droit
-        right_scroll = ctk.CTkScrollableFrame(right_outer, fg_color="transparent",
-                                              scrollbar_button_color=SURF3,
-                                              scrollbar_button_hover_color=ACCENT)
-        right_scroll.pack(fill="both", expand=True)
-        r = right_scroll
+        # ── Panneau droit : Fichiers (fixe) + TabView ───────────────────────
 
-        # Fichiers
-        self._section_title(r, "📁  Fichiers")
-        fc = _card(r)
-        fc.pack(fill="x", pady=(0, 10), padx=4)
+        # Fichiers — toujours visible en haut, hors onglets
+        fc = _card(right_outer)
+        fc.pack(fill="x", padx=4, pady=(0, 6))
         ctk.CTkLabel(fc, text=self._short_name(self.audio_path),
-                     text_color=ACCLT, font=FONT_SM, anchor="w").pack(fill="x", padx=14, pady=(10, 2))
+                     text_color=ACCLT, font=FONT_SM, anchor="w").pack(fill="x", padx=14, pady=(8, 2))
         ctk.CTkLabel(fc, text=self._short_name(self.image_path),
-                     text_color=MUTED, font=FONT_MU, anchor="w").pack(fill="x", padx=14, pady=(0, 8))
+                     text_color=MUTED, font=FONT_MU, anchor="w").pack(fill="x", padx=14, pady=(0, 6))
         br = ctk.CTkFrame(fc, fg_color="transparent")
-        br.pack(fill="x", padx=10, pady=(0, 10))
-        _btn(br, "🎵 Musique", self.show_step_audio, small=True, height=30).pack(
+        br.pack(fill="x", padx=10, pady=(0, 8))
+        _btn(br, "🎵 Musique", self.show_step_audio, small=True, height=28).pack(
             side="left", padx=(0, 6), fill="x", expand=True)
-        _btn(br, "🖼 Pochette", self.show_step_image, small=True, height=30).pack(
+        _btn(br, "🖼 Pochette", self.show_step_image, small=True, height=28).pack(
             side="left", fill="x", expand=True)
 
-        # Texte
-        self._section_title(r, "✍  Texte")
-        tc = _card(r)
-        tc.pack(fill="x", pady=(0, 10), padx=4)
-        ti = ctk.CTkFrame(tc, fg_color="transparent")
-        ti.pack(fill="x", padx=10, pady=10)
-        ctk.CTkLabel(ti, text="Artiste", text_color=MUTED, font=FONT_MU, anchor="w").pack(anchor="w")
-        ctk.CTkEntry(ti, textvariable=self.artist_text,
-                     placeholder_text="Nom de l'artiste  (optionnel)",
-                     fg_color=SURF3, border_color=BORDER, text_color=TEXT,
-                     font=FONT_SM).pack(fill="x", pady=(2, 8))
-        ctk.CTkLabel(ti, text="Titre", text_color=MUTED, font=FONT_MU, anchor="w").pack(anchor="w")
-        ctk.CTkEntry(ti, textvariable=self.title_text,
-                     placeholder_text="Titre du son  (optionnel)",
-                     fg_color=SURF3, border_color=BORDER, text_color=TEXT,
-                     font=FONT_SM).pack(fill="x", pady=(2, 8))
-        self._text_preview_lbl = ctk.CTkLabel(ti, text="", text_color=ACCLT,
-                                               font=FONT_MU, anchor="w")
-        self._text_preview_lbl.pack(anchor="w", pady=(0, 4))
-        self.artist_text.trace_add("write", lambda *_: self._update_text_preview())
-        self.title_text.trace_add("write",  lambda *_: self._update_text_preview())
-        self._update_text_preview()
-        _sep(ti)
-        self._slider_row(ti, "Position X", self.text_x, 0.05, 0.95)
-        self._slider_row(ti, "Position Y", self.text_y, 0.15, 0.92)
+        # TabView 5 onglets
+        tabs = ctk.CTkTabview(right_outer,
+                              fg_color=SURF2,
+                              segmented_button_fg_color=SURF3,
+                              segmented_button_selected_color=ACCENT,
+                              segmented_button_selected_hover_color=ACCHOV,
+                              segmented_button_unselected_color=SURF3,
+                              segmented_button_unselected_hover_color=SURF2,
+                              text_color=TEXT,
+                              corner_radius=10, border_width=1, border_color=BORDER)
+        tabs.pack(fill="both", expand=True, padx=4)
+        for tab_name in ["⚡", "🎵", "🎨", "📊", "🚀"]:
+            tabs.add(tab_name)
 
-        # Preset
-        self._section_title(r, "⚡  Preset rapide")
-        pc = _card(r)
-        pc.pack(fill="x", pady=(0, 10), padx=4)
-        ctk.CTkComboBox(pc, variable=self.global_preset,
+        def mkscroll(tab_name):
+            s = ctk.CTkScrollableFrame(tabs.tab(tab_name), fg_color="transparent",
+                                       scrollbar_button_color=SURF3,
+                                       scrollbar_button_hover_color=ACCENT)
+            s.pack(fill="both", expand=True)
+            return s
+
+        # ── ⚡ Presets ────────────────────────────────────────────────────────
+        tp = mkscroll("⚡")
+        ctk.CTkLabel(tp, text="Preset global", text_color=MUTED, font=FONT_MU, anchor="w").pack(anchor="w", pady=(8, 2))
+        ctk.CTkComboBox(tp, variable=self.global_preset,
                         values=list(GLOBAL_PRESETS.keys()),
                         command=lambda _: self._apply_global_preset(),
                         fg_color=SURF3, border_color=BORDER,
                         button_color=ACCENT, button_hover_color=ACCHOV,
                         dropdown_fg_color=SURF2, text_color=TEXT,
-                        font=FONT_SM).pack(fill="x", padx=10, pady=(10, 6))
-        _btn(pc, "APPLIQUER", self._apply_global_preset,
-             accent=True, height=34, small=True).pack(fill="x", padx=10, pady=(0, 10))
+                        font=FONT_SM).pack(fill="x", pady=(0, 6))
+        _btn(tp, "✦  APPLIQUER LE PRESET", self._apply_global_preset,
+             accent=True, height=36, small=True).pack(fill="x", pady=(0, 10))
+        _sep(tp)
+        ctk.CTkLabel(tp, text="Raccourcis", text_color=MUTED, font=FONT_SEC, anchor="w").pack(anchor="w", pady=(8, 4))
+        for k, v in [("Espace", "Play / Pause"), ("R", "Recharger"), ("F11", "Plein écran"), ("Échap", "Accueil")]:
+            row = ctk.CTkFrame(tp, fg_color=SURF3, corner_radius=6)
+            row.pack(fill="x", pady=2)
+            ctk.CTkLabel(row, text=k, text_color=ACCLT, font=FONT_SEC, width=56, anchor="w").pack(side="left", padx=8, pady=5)
+            ctk.CTkLabel(row, text=v, text_color=MUTED, font=FONT_MU, anchor="w").pack(side="left")
 
-        # Ambiance
-        self._section_title(r, "🌫  Ambiance")
-        ac = _card(r)
-        ac.pack(fill="x", pady=(0, 10), padx=4)
-        ai = ctk.CTkFrame(ac, fg_color="transparent")
-        ai.pack(fill="x", padx=10, pady=10)
-        self._combo_row(ai, "Particules",    self.particle_preset, list(PARTICLE_PRESETS.keys()))
-        self._combo_row(ai, "Fumée",         self.smoke_preset,    list(SMOKE_PRESETS.keys()))
-        self._combo_row(ai, "Couleur fumée", self.smoke_color,     list(SMOKE_COLORS.keys()))
-        _sep(ai)
-        self._slider_row(ai, "Taille image", self.image_zoom,     0.65, 1.35)
-        self._slider_row(ai, "Pulse image",  self.pulse_strength, 0.0,  2.2)
-        _sep(ai)
-
-        # ── Disque vinyle toggle (Update 4) ───────────────────────────────
-        vinyl_row = ctk.CTkFrame(ai, fg_color="transparent")
-        vinyl_row.pack(fill="x", pady=(8, 4))
-        ctk.CTkLabel(vinyl_row, text="🎵  Disque vinyle", text_color=TEXT,
-                     font=FONT_H2, anchor="w").pack(side="left")
-        ctk.CTkSwitch(vinyl_row, text="", variable=self.vinyl_mode,
-                      command=self._on_setting_changed,
+        # ── 🎵 Ambiance ────────────────────────────────────────────────────────
+        ta = mkscroll("🎵")
+        self._combo_row(ta, "Particules",    self.particle_preset, list(PARTICLE_PRESETS.keys()))
+        self._combo_row(ta, "Fumée",         self.smoke_preset,    list(SMOKE_PRESETS.keys()))
+        self._combo_row(ta, "Couleur fumée", self.smoke_color,     list(SMOKE_COLORS.keys()))
+        _sep(ta)
+        self._slider_row(ta, "Taille image", self.image_zoom,     0.65, 1.35)
+        self._slider_row(ta, "Pulse image",  self.pulse_strength, 0.0,  2.2)
+        _sep(ta)
+        vr = ctk.CTkFrame(ta, fg_color="transparent")
+        vr.pack(fill="x", pady=(10, 2))
+        ctk.CTkLabel(vr, text="🎵  Disque vinyle", text_color=TEXT, font=FONT_H2, anchor="w").pack(side="left")
+        ctk.CTkSwitch(vr, text="", variable=self.vinyl_mode, command=self._on_setting_changed,
                       progress_color=ACCENT, button_color=ACCLT,
                       button_hover_color=ACCENT, width=44, height=22).pack(side="right")
-        ctk.CTkLabel(ai, text="Pochette circulaire rotative réactive aux beats",
+        ctk.CTkLabel(ta, text="Sort à droite de la pochette, réactif aux beats",
                      text_color=MUTED, font=FONT_MU, anchor="w").pack(anchor="w", pady=(0, 4))
+        vt = ctk.CTkFrame(ta, fg_color="transparent")
+        vt.pack(fill="x", pady=(0, 6))
+        for val, lbl in [(False, "🖼 Image"), (True, "⚫ Noir classique")]:
+            ctk.CTkRadioButton(vt, text=lbl, variable=self.vinyl_black, value=val,
+                               command=self._on_setting_changed,
+                               fg_color=ACCENT, hover_color=ACCHOV,
+                               text_color=TEXT, font=FONT_SM).pack(side="left", padx=(0, 14))
+        _sep(ta)
+        ctk.CTkLabel(ta, text="Artiste", text_color=MUTED, font=FONT_MU, anchor="w").pack(anchor="w", pady=(8, 2))
+        ctk.CTkEntry(ta, textvariable=self.artist_text,
+                     placeholder_text="Artiste (optionnel)",
+                     fg_color=SURF3, border_color=BORDER, text_color=TEXT,
+                     font=FONT_SM).pack(fill="x", pady=(0, 6))
+        ctk.CTkLabel(ta, text="Titre", text_color=MUTED, font=FONT_MU, anchor="w").pack(anchor="w")
+        ctk.CTkEntry(ta, textvariable=self.title_text,
+                     placeholder_text="Titre (optionnel)",
+                     fg_color=SURF3, border_color=BORDER, text_color=TEXT,
+                     font=FONT_SM).pack(fill="x", pady=(2, 4))
+        self._text_preview_lbl = ctk.CTkLabel(ta, text="", text_color=ACCLT, font=FONT_MU, anchor="w")
+        self._text_preview_lbl.pack(anchor="w", pady=(0, 2))
+        self.artist_text.trace_add("write", lambda *_: self._update_text_preview())
+        self.title_text.trace_add("write",  lambda *_: self._update_text_preview())
+        self._update_text_preview()
+        _sep(ta)
+        self._slider_row(ta, "Texte X", self.text_x, 0.05, 0.95)
+        self._slider_row(ta, "Texte Y", self.text_y, 0.15, 0.92)
 
-        # ── Fond dégradé (Update 3 — Feature 1) ───────────────────────────
-        self._section_title(r, "🎨  Fond")
-        bg_card = _card(r)
-        bg_card.pack(fill="x", pady=(0, 10), padx=4)
-        bg_inner = ctk.CTkFrame(bg_card, fg_color="transparent")
-        bg_inner.pack(fill="x", padx=10, pady=10)
-
-        ctk.CTkLabel(bg_inner, text="Mode de fond", text_color=MUTED, font=FONT_MU, anchor="w").pack(anchor="w")
-        mode_row = ctk.CTkFrame(bg_inner, fg_color="transparent")
-        mode_row.pack(fill="x", pady=(2, 8))
+        # ── 🎨 Fond ────────────────────────────────────────────────────────────
+        tf = mkscroll("🎨")
+        ctk.CTkLabel(tf, text="Mode de fond", text_color=MUTED, font=FONT_MU, anchor="w").pack(anchor="w", pady=(8, 2))
+        mr = ctk.CTkFrame(tf, fg_color="transparent")
+        mr.pack(fill="x", pady=(0, 8))
         for val, label in [("photo", "📷 Photo floue"), ("gradient", "🌈 Dégradé")]:
-            ctk.CTkRadioButton(mode_row, text=label, variable=self.bg_mode, value=val,
+            ctk.CTkRadioButton(mr, text=label, variable=self.bg_mode, value=val,
                                command=self._on_bg_mode_changed,
                                fg_color=ACCENT, hover_color=ACCHOV,
-                               text_color=TEXT, font=FONT_SM).pack(side="left", padx=(0, 16))
-
-        self._gradient_frame = ctk.CTkFrame(bg_inner, fg_color="transparent")
+                               text_color=TEXT, font=FONT_SM).pack(side="left", padx=(0, 14))
+        self._gradient_frame = ctk.CTkFrame(tf, fg_color="transparent")
         self._gradient_frame.pack(fill="x")
         self._build_gradient_pickers(self._gradient_frame)
+        _btn(tf, "🎲  Couleurs aléatoires", self._randomize_gradient_colors,
+             small=True, height=28).pack(fill="x", pady=(6, 0))
         self._refresh_gradient_visibility()
+        _sep(tf)
+        fr = ctk.CTkFrame(tf, fg_color="transparent")
+        fr.pack(fill="x", pady=(10, 2))
+        ctk.CTkLabel(fr, text="🌊  Fond flottant", text_color=TEXT, font=FONT_H2, anchor="w").pack(side="left")
+        ctk.CTkSwitch(fr, text="", variable=self.floating_bg, command=self._on_setting_changed,
+                      progress_color=ACCENT, button_color=ACCLT,
+                      button_hover_color=ACCENT, width=44, height=22).pack(side="right")
+        ctk.CTkLabel(tf, text="Dérive sinusoïdale réactive aux basses",
+                     text_color=MUTED, font=FONT_MU, anchor="w").pack(anchor="w", pady=(0, 8))
 
-        # Spectre
-        self._section_title(r, "📊  Spectre")
-        sc = _card(r)
-        sc.pack(fill="x", pady=(0, 10), padx=4)
-        si = ctk.CTkFrame(sc, fg_color="transparent")
-        si.pack(fill="x", padx=10, pady=10)
-        self._combo_row(si, "Style",      self.spectrum_style, SPECTRUM_STYLES)
-        _sep(si)
-        self._slider_row(si, "Taille",    self.spectrum_size,  0.55, 1.65)
-        self._slider_row(si, "Position Y", self.spectrum_y,   0.62, 0.95)
+        # ── 📊 Spectre ─────────────────────────────────────────────────────────
+        ts = mkscroll("📊")
+        self._combo_row(ts, "Style", self.spectrum_style, SPECTRUM_STYLES)
+        _sep(ts)
+        self._slider_row(ts, "Taille",     self.spectrum_size, 0.55, 1.65)
+        self._slider_row(ts, "Position Y", self.spectrum_y,   0.62, 0.95)
+        _sep(ts)
+        ctk.CTkLabel(ts, text="Couleur", text_color=MUTED, font=FONT_MU, anchor="w").pack(anchor="w", pady=(8, 2))
+        cr = ctk.CTkFrame(ts, fg_color="transparent")
+        cr.pack(fill="x", pady=(0, 4))
+        self._spec_swatch = tk.Label(cr, bg=self.spectrum_color, width=5, relief="flat",
+                                     bd=1, highlightbackground=BORDER, highlightthickness=1)
+        self._spec_swatch.pack(side="left", padx=(0, 6))
+        self._spec_hex_lbl = ctk.CTkLabel(cr, text=self.spectrum_color,
+                                           text_color=TEXT, font=FONT_MU, width=65, anchor="w")
+        self._spec_hex_lbl.pack(side="left")
+        _btn(cr, "Choisir", self._pick_spectrum_color, small=True, width=70, height=26).pack(side="left", padx=(6, 0))
+        _btn(cr, "⬜", lambda: self._set_spectrum_color("#ffffff"), small=True, width=36, height=26).pack(side="left", padx=(4, 0))
+        ar = ctk.CTkFrame(ts, fg_color="transparent")
+        ar.pack(fill="x", pady=(0, 4))
+        ctk.CTkLabel(ar, text="Auto depuis pochette", text_color=MUTED, font=FONT_MU, anchor="w").pack(side="left")
+        ctk.CTkSwitch(ar, text="", variable=self.spectrum_color_auto,
+                      command=self._on_spectrum_color_auto,
+                      progress_color=ACCENT, button_color=ACCLT,
+                      button_hover_color=ACCENT, width=44, height=22).pack(side="right")
 
-        # Export
-        self._section_title(r, "🚀  Export")
-        ec = _card(r)
-        ec.pack(fill="x", pady=(0, 6), padx=4)
-        ei = ctk.CTkFrame(ec, fg_color="transparent")
-        ei.pack(fill="x", padx=10, pady=10)
-
-        ctk.CTkLabel(ei, text="Dossier de sortie", text_color=MUTED, font=FONT_MU, anchor="w").pack(anchor="w")
-        rr = ctk.CTkFrame(ei, fg_color="transparent")
-        rr.pack(fill="x", pady=(2, 8))
+        # ── 🚀 Export ──────────────────────────────────────────────────────────
+        te = mkscroll("🚀")
+        ctk.CTkLabel(te, text="Dossier de sortie", text_color=MUTED, font=FONT_MU, anchor="w").pack(anchor="w", pady=(8, 2))
+        rr = ctk.CTkFrame(te, fg_color="transparent")
+        rr.pack(fill="x", pady=(0, 8))
         ctk.CTkLabel(rr, textvariable=self.project_root_var,
-                     text_color=MUTED, font=FONT_MU, anchor="w", wraplength=210).pack(side="left", fill="x", expand=True)
+                     text_color=MUTED, font=FONT_MU, anchor="w", wraplength=220).pack(side="left", fill="x", expand=True)
         _btn(rr, "...", self._choose_project_root, small=True, width=36, height=26).pack(side="right")
-
-        ctk.CTkLabel(ei, text="Nom du projet *", text_color=MUTED, font=FONT_MU, anchor="w").pack(anchor="w")
-        self._proj_name_entry = ctk.CTkEntry(ei, textvariable=self.project_name_var,
+        ctk.CTkLabel(te, text="Nom du projet *", text_color=MUTED, font=FONT_MU, anchor="w").pack(anchor="w")
+        self._proj_name_entry = ctk.CTkEntry(te, textvariable=self.project_name_var,
                                               placeholder_text="ex : MonSon_RageMix  (obligatoire)",
                                               fg_color=SURF3, border_color=BORDER,
                                               text_color=TEXT, font=FONT_SM)
         self._proj_name_entry.pack(fill="x", pady=(2, 2))
-        self._proj_name_error = ctk.CTkLabel(ei, text="", text_color=DANGER, font=FONT_MU, anchor="w")
-        self._proj_name_error.pack(anchor="w", pady=(0, 10))
-
-        ctk.CTkLabel(ei, text="Type d'export", text_color=MUTED, font=FONT_MU, anchor="w").pack(anchor="w", pady=(0, 6))
+        self._proj_name_error = ctk.CTkLabel(te, text="", text_color=DANGER, font=FONT_MU, anchor="w")
+        self._proj_name_error.pack(anchor="w", pady=(0, 8))
+        ctk.CTkLabel(te, text="Preview départ (sec)", text_color=MUTED, font=FONT_MU, anchor="w").pack(anchor="w")
+        prow = ctk.CTkFrame(te, fg_color="transparent")
+        prow.pack(fill="x", pady=(2, 10))
+        ctk.CTkEntry(prow, textvariable=self.preview_start,
+                     fg_color=SURF3, border_color=BORDER, text_color=TEXT,
+                     font=FONT_SM, width=80).pack(side="left")
+        _btn(prow, "Analyser", self._prepare_preview, small=True, width=90, height=28).pack(side="left", padx=(8, 0))
+        ctk.CTkLabel(te, text="Type d'export", text_color=MUTED, font=FONT_MU, anchor="w").pack(anchor="w", pady=(0, 4))
         self._duration_btns: dict[str, ctk.CTkButton] = {}
         for val, title, desc in [
             ("CHECK",   "CHECK — 15 secondes",  "Horizontal 1920×1080"),
             ("SHORT",   "SHORT — 1 minute",      "Milieu · vertical 1080×1920"),
             ("COMPLET", "COMPLET — Son entier",  "Durée totale · horizontal 1920×1080"),
         ]:
-            b = ctk.CTkButton(ei, text=f"{title}\n{desc}",
+            b = ctk.CTkButton(te, text=f"{title}\n{desc}",
                               command=lambda v=val: self._set_export_mode(v),
                               fg_color=SURF3, hover_color=SURF2, text_color=MUTED,
                               font=FONT_H2, corner_radius=8, height=52, anchor="w")
             b.pack(fill="x", pady=3)
             self._duration_btns[val] = b
         self._refresh_mode_btns()
-
-        _btn(ei, "  ▶  GÉNÉRER", self._start_export,
+        _btn(te, "  ▶  GÉNÉRER", self._start_export,
              accent=True, height=46).pack(fill="x", pady=(12, 0))
 
         self._prepare_preview()
@@ -876,6 +917,67 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
                     self._reload_visuals_only()
 
             _btn(row, "Choisir", pick, small=True, width=70, height=24).pack(side="right", padx=(0, 6))
+
+    # ── Couleur spectre (Update 5) ───────────────────────────────────────────
+
+    def _pick_spectrum_color(self):
+        result = colorchooser.askcolor(color=self.spectrum_color, title="Couleur du spectre")
+        if result and result[1]:
+            self._set_spectrum_color(result[1])
+
+    def _set_spectrum_color(self, hex_color: str):
+        self.spectrum_color = hex_color
+        if hasattr(self, "_spec_swatch"):
+            self._spec_swatch.configure(bg=hex_color)
+        if hasattr(self, "_spec_hex_lbl"):
+            self._spec_hex_lbl.configure(text=hex_color)
+        self._schedule_persist()
+        if self.preview_ready:
+            self._reload_visuals_only()
+
+    def _on_spectrum_color_auto(self):
+        if self.spectrum_color_auto.get() and self.preview_cover is not None:
+            from app.renderer import extract_dominant_color
+            auto_c = extract_dominant_color(self.preview_cover)
+            self._set_spectrum_color(auto_c)
+        self._schedule_persist()
+
+    def _randomize_gradient_colors(self):
+        """Génère deux couleurs harmonieuses aléatoires pour le dégradé."""
+        import colorsys, random
+        h = random.random()
+        h2 = (h + 0.05 + random.random() * 0.20) % 1.0
+        s1 = 0.65 + random.random() * 0.30
+        s2 = 0.55 + random.random() * 0.30
+        v1 = 0.12 + random.random() * 0.16   # couleurs sombres pour les fonds
+        v2 = 0.07 + random.random() * 0.12
+        def to_hex(r, g, b):
+            return f"#{int(r*255):02x}{int(g*255):02x}{int(b*255):02x}"
+        c1 = to_hex(*colorsys.hsv_to_rgb(h,  s1, v1))
+        c2 = to_hex(*colorsys.hsv_to_rgb(h2, s2, v2))
+        self.gradient_top    = c1
+        self.gradient_bottom = c2
+        self._update_gradient_ui()
+        self.bg_mode.set("gradient")
+        self._refresh_gradient_visibility()
+        self._schedule_persist()
+        self._reload_visuals_only()
+
+    def _update_gradient_ui(self):
+        """Met à jour les swatches et labels hex du dégradé."""
+        if hasattr(self, "_grad_swatches"):
+            for attr, color in [("gradient_top", self.gradient_top),
+                                 ("gradient_bottom", self.gradient_bottom)]:
+                if attr in self._grad_swatches:
+                    try:
+                        self._grad_swatches[attr].configure(bg=color)
+                    except Exception:
+                        pass
+                if attr in self._grad_hex_lbls:
+                    try:
+                        self._grad_hex_lbls[attr].configure(text=color)
+                    except Exception:
+                        pass
 
     def _on_bg_mode_changed(self):
         self._refresh_gradient_visibility()
@@ -1003,6 +1105,10 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
             "gradient_top":     self.gradient_top,
             "gradient_bottom":  self.gradient_bottom,
             "vinyl_mode":       bool(self.vinyl_mode.get()),
+            "vinyl_black":      bool(self.vinyl_black.get()),
+            "spectrum_color":     self.spectrum_color,
+            "spectrum_color_auto": bool(self.spectrum_color_auto.get()),
+            "floating_bg":        bool(self.floating_bg.get()),
         }
         save_config(self.config_data)
 
@@ -1021,6 +1127,24 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
         self.spectrum_y.set(p["spectrum_y"])
         self.image_zoom.set(p["image_zoom"])
         self.pulse_strength.set(p["pulse_strength"])
+        # Champs Update 4 + 5
+        if "vinyl_mode" in p:
+            self.vinyl_mode.set(p["vinyl_mode"])
+        if "vinyl_black" in p:
+            self.vinyl_black.set(p["vinyl_black"])
+        if "spectrum_color" in p:
+            self._set_spectrum_color(p["spectrum_color"])
+        if "floating_bg" in p:
+            self.floating_bg.set(p["floating_bg"])
+        if "bg_mode" in p:
+            self.bg_mode.set(p["bg_mode"])
+            self._refresh_gradient_visibility()
+        if "gradient_top" in p:
+            self.gradient_top = p["gradient_top"]
+            self._update_gradient_ui()
+        if "gradient_bottom" in p:
+            self.gradient_bottom = p["gradient_bottom"]
+            self._update_gradient_ui()
         self._schedule_persist()
         if not self.is_rendering:
             self._reload_visuals_only()
@@ -1112,6 +1236,10 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
             gradient_top=self.gradient_top,
             gradient_bottom=self.gradient_bottom,
             vinyl_mode=bool(self.vinyl_mode.get()),
+            vinyl_black=bool(self.vinyl_black.get()),
+            spectrum_color=self.spectrum_color,
+            spectrum_color_auto=bool(self.spectrum_color_auto.get()),
+            floating_bg=bool(self.floating_bg.get()),
         )
 
     # ══════════════════════════════════════════════════════════════════════════
@@ -1191,12 +1319,22 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
         metrics = {k: float(self.preview_features[k][i])
                    for k in ("rms", "kick", "bass", "mid", "high")}
 
+        raw_f = self.preview_features["raw"][i] if "raw" in self.preview_features else None
+        # Auto couleur : extraire depuis la pochette au premier frame
+        if s.spectrum_color_auto and self.preview_bg is not None and i == 0:
+            from app.renderer import extract_dominant_color
+            auto_c = extract_dominant_color(self.preview_cover)
+            if hasattr(self, "_spec_swatch"):
+                self._set_spectrum_color(auto_c)
+
         frame, self.preview_particles, self.preview_smoke, self.preview_smoothed, self.vinyl_angle = render_frame(
             self.preview_bg, self.preview_cover,
             self.preview_particles, self.preview_smoke,
             self.preview_features["spec"][:, i],
             metrics, self.preview_smoothed, s,
             self.vinyl_angle,
+            frame_idx=self.preview_index,
+            raw_frame=raw_f,
         )
 
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
