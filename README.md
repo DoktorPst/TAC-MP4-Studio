@@ -218,4 +218,15 @@ Fait avec 🎧 par **DoktorP3st**
 
 *Si ce projet t'a servi, une étoile ⭐ c'est toujours apprécié.*
 
+---
+
+### 🌐 Retrouve-nous
+
+| | Canal | Lien |
+|:---:|:---|:---|
+| 🟣 | **Twitch — DoktorP3st** | [twitch.tv/doktorp3st](https://www.twitch.tv/doktorp3st) |
+| 🟣 | **Twitch — Paglorieux** | [twitch.tv/paglorieux](https://www.twitch.tv/paglorieux) |
+| 🔴 | **YouTube — TheAuraliaCryia** | [youtube.com/@TheAuraliaCryia](https://www.youtube.com/@TheAuraliaCryia) |
+| 🔴 | **YouTube — Paglorieux** | [youtube.com/@Paglorieux](https://www.youtube.com/@Paglorieux) |
+
 </div>
