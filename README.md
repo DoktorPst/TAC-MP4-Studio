@@ -1,6 +1,8 @@
 <div align="center">
 
-# 🎵 TAC MP4 Studio
+<img src="https://i.imgur.com/fByY54g.png" width="120" alt="TAC MP4 Studio Logo"/>
+
+# TAC MP4 Studio
 
 **Générateur automatique de vidéos musicales réactives**
 
@@ -21,9 +23,9 @@
 
 <div align="center">
 
-![TAC MP4 Studio — Page d'accueil](https://i.imgur.com/cHnKviv.png)
+![Page d'accueil TAC MP4 Studio](https://i.imgur.com/fByY54g.png)
 
-*Page d'accueil — interface dark CustomTkinter*
+*Page d'accueil — fond animé · spectre vivant · logo TAC*
 
 </div>
 
@@ -33,37 +35,74 @@ Conçu pour les producteurs, beatmakers et artistes qui veulent un rendu profess
 
 ---
 
-## 🎬 Rendus
+## 🚀 Workflow en 3 étapes
 
 <div align="center">
 
-![Import musique et pochette](https://i.imgur.com/cRNg6WM.png)
+| Étape 1 | Étape 2 |
+|:---:|:---:|
+| ![Importer la musique](https://i.imgur.com/Avjy1Jt.png) | ![Importer la pochette](https://i.imgur.com/Tr5mobX.png) |
+| Importer un fichier audio | Importer la pochette |
 
-*Import audio et pochette · Drag & Drop ou sélection fichier*
+*MP3 · WAV · FLAC · OGG · M4A — PNG · JPG · WEBP — ou glisse directement sur la fenêtre*
+
+</div>
+
+---
+
+## 🖥️ Interface principale
+
+<div align="center">
+
+![Interface principale TAC MP4 Studio](https://i.imgur.com/UySZIl3.png)
+
+*Éditeur complet — waveform interactive · preview live · 5 onglets de réglages*
+
+</div>
+
+---
+
+## 🎛️ Réglages
+
+<div align="center">
+
+| Ambiance & Vinyle | Fond & Dégradé |
+|:---:|:---:|
+| ![Réglages ambiance et vinyle](https://i.imgur.com/rlaOouR.png) | ![Réglages fond](https://i.imgur.com/NY6vDl8.png) |
+| Particules · Fumée · Disque vinyle | Photo floutée · Dégradé · Fond flottant |
 
 </div>
 
 <div align="center">
 
-![Interface principale](https://i.imgur.com/hVCWmPk.png)
-
-*Éditeur — waveform interactive · preview live · 5 onglets de réglages · presets 1 clic*
-
-</div>
-
-<div align="center">
-
-![Pochette + Vinyle rotatif](https://i.imgur.com/VaMRIP6.png)
-
-*Mode Vinyle — pochette sleeve au premier plan · disque rotatif réactif aux beats*
+| Spectre & Couleurs | Export |
+|:---:|:---:|
+| ![Réglages spectre](https://i.imgur.com/t3lXSBG.png) | ![Panel export](https://i.imgur.com/x71qF4G.png) |
+| 10 styles · Couleur · Auto depuis pochette | CHECK · SHORT · COMPLET |
 
 </div>
 
+---
+
+## 📱 Format SHORT vertical
+
 <div align="center">
 
-![Panel export](https://i.imgur.com/WldOrGr.png)
+![Format SHORT vertical 1080x1920](https://i.imgur.com/qJlMsaH.png)
 
-*Panel export — CHECK · SHORT · COMPLET · cards cliquables*
+*Format 1080×1920 — milieu automatique du son · Reels · TikTok · YouTube Shorts*
+
+</div>
+
+---
+
+## 🗂️ Historique
+
+<div align="center">
+
+![Historique des créations](https://i.imgur.com/8xaf3GL.png)
+
+*Historique — miniatures auto · ouvrir dossier · ouvrir vidéo · supprimer*
 
 </div>
 
@@ -94,15 +133,25 @@ Conçu pour les producteurs, beatmakers et artistes qui veulent un rendu profess
 Tous les styles supportent la **couleur personnalisée** ou l'extraction automatique depuis la pochette.
 
 ### 🎵 Mode Vinyle
+
+<div align="center">
+
+![Pochette sleeve + disque vinyle rotatif](https://i.imgur.com/FIx4Hzo.png)
+
+*Pochette sleeve au premier plan · vinyle rotatif à droite · réactif aux beats*
+
+</div>
+
 - Composition pochette sleeve (premier plan) + disque rotatif (arrière-plan)
-- Deux styles : **Image** (pochette visible sur le disque) ou **Noir classique** (sillons + label central)
+- **Image** : pochette visible sur tout le disque
+- **Noir classique** : sillons + label central uniquement
 - Rotation réactive — basses = accélération · kicks = saccades
 
 ### 🌫 Effets visuels
 - **Fumée** — blobs animés (Légère · Cinématique · Dense)
 - **Particules** — réactives aux kicks et aux aigus
 - **Fond flottant** — dérive sinusoïdale réactive aux basses
-- **Fond dégradé** — color pickers + **couleurs aléatoires vives**
+- **Fond dégradé** — color pickers + couleurs aléatoires vives
 - **Vignette** — masque précalculé
 
 ### 🚀 3 modes d'export
@@ -119,70 +168,57 @@ Le mode **SHORT** extrait automatiquement 60 secondes centrées sur le milieu de
 
 ## 🆕 Historique des mises à jour
 
-### v1.5.1 — Fix & polish
-- 🐛 Fix ligne parasite sur la pochette d'album (artefact `rounded_rectangle`)
-- 🏠 Page d'accueil redesignée avec fond splitté et pills de features
+### v1.5.1 — Fix & Polish
+- 🐛 Fix ligne parasite sur la pochette d'album
+- 🏠 Page d'accueil redesignée avec fond animé et logo
 - 🚀 Panel export redesigné en cards cliquables avec badges colorés
-- 🔢 Version visible dans la fenêtre Réglages (⚙)
+- 🔢 Version visible dans la fenêtre Réglages ⚙
 
-### v1.5.0 — Update 5 · Couleurs & fond flottant
-
-<div align="center">
-
-![Fond dégradé configurable](https://i.imgur.com/K4p0h4l.png)
-
-</div>
-
+### v1.5.0 — Couleurs & Fond flottant
 - 🎨 Couleur du spectre personnalisable + extraction auto depuis la pochette
-- 🌊 Fond flottant animé (dérive sinusoïdale réactive aux basses)
-- 📊 Oscilloscope — 10ème style de spectre (forme d'onde brute)
+- 🌊 Fond flottant animé réactif aux basses
+- 📊 Oscilloscope — 10ème style de spectre
 - ⚫ Vinyle noir classique ou image au choix
-- 🎲 Bouton couleurs aléatoires vives pour le dégradé
+- 🎲 Couleurs aléatoires vives pour le dégradé
 - ✨ 5 nouveaux presets : Vinyl Classic · Vinyl Gold · Acid Wave · Purple Dream · Midnight Vinyl
 
-### v1.4.0 — Update 4 · Disque vinyle
+### v1.4.0 — Disque Vinyle
+- 🎵 Pochette sleeve + disque vinyle rotatif réactif
 
-<div align="center">
+### v1.3.0 — Fond dégradé · Miniatures · Plein écran
+- 🎨 Fond dégradé configurable · 🖼 Miniatures auto · ⛶ Plein écran F11
 
-![Pochette + Vinyle rotatif](https://i.imgur.com/VaMRIP6.png)
+### v1.2.0 — Waveform · Artiste/Titre · Raccourcis
+- 🎚 Waveform cliquable · ✍ Artiste + Titre séparés · ⌨ Raccourcis clavier
 
-</div>
-
-- 🎵 Composition pochette sleeve + disque vinyle rotatif réactif
-- Ombre portée · sillons concentriques · reflet statique · trou de broche
-
-### v1.3.0 — Update 3 · Fond dégradé · Miniatures · Plein écran
-- 🎨 Fond dégradé configurable avec color pickers
-- 🖼 Miniatures automatiques dans l'historique après chaque export
-- ⛶ Mode plein écran preview (F11 ou double-clic)
-
-### v1.2.0 — Update 2 · Waveform · Artiste/Titre · Raccourcis
-- 🎚 Waveform globale cliquable pour naviguer dans le son
-- ✍ Champs Artiste + Titre séparés avec rendu différencié
-- ⌨ Raccourcis clavier : Espace · R · F11 · Échap
-
-### v1.1.0 — Update 1 · Switch format · Drag & Drop
-- 🔄 Switch preview 16:9 ↔ 9:16
-- 📂 Drag & Drop audio et image
-- ⚠️ Vérification FFmpeg au démarrage
-- ✅ Validation nom projet avant export
+### v1.1.0 — Switch format · Drag & Drop
+- 🔄 Preview 16:9↔9:16 · 📂 Drag & Drop · ⚠️ Vérif FFmpeg · ✅ Validation nom
 
 ### v1.0.0 — Release initiale
 - 9 styles de spectre · fumée · particules · 3 modes export · interface CustomTkinter
 
 ---
 
-## 🖥️ Interface
+## 🖥️ Organisation de l'interface
 
-L'éditeur est organisé en **5 onglets** accessibles sans scroll :
+L'éditeur est organisé en **5 onglets** — plus de scroll infini :
 
 | Onglet | Contenu |
 |:---:|---|
-| ⚡ | Presets intégrés + **Mes presets** (sauvegarde perso) |
+| ⚡ | Presets intégrés + **Mes presets** (sauvegarde personnalisée) |
 | 🎵 | Ambiance · Vinyle · Texte Artiste/Titre |
-| 🎨 | Fond photo ou dégradé · Fond flottant |
-| 📊 | Style spectre · Taille · Couleur |
-| 🚀 | Export · Dossier · Nom projet · CHECK/SHORT/COMPLET |
+| 🎨 | Fond photo ou dégradé · Couleurs aléatoires · Fond flottant |
+| 📊 | Style spectre · Taille · Position · Couleur |
+| 🚀 | Export · Dossier · Nom projet · CHECK / SHORT / COMPLET |
+
+**Raccourcis clavier :**
+
+| Touche | Action |
+|---|---|
+| `Espace` | Play / Pause preview audio |
+| `R` | Recharger la preview |
+| `F11` | Plein écran preview |
+| `Échap` | Fermer plein écran / Retour accueil |
 
 ---
 
@@ -203,7 +239,7 @@ L'objectif n'est pas de le concurrencer. C'est un outil pensé pour mes propres 
 - Plus de templates et d'effets
 - Rendu cloud plus rapide sur petites machines
 
-Le projet est développé en **Python** (OpenCV · librosa · CustomTkinter · FFmpeg). Si l'outil devient utile à un plus grand nombre, une migration vers une stack plus performante est possible — mais Python fait le job pour l'instant.
+Le projet est développé en **Python** (OpenCV · librosa · CustomTkinter · FFmpeg). Si l'outil devient utile à un plus grand nombre, une migration vers une stack plus performante est envisageable.
 
 ---
 
@@ -245,17 +281,17 @@ python main.py
 
 ---
 
-## 🖥️ Utilisation
+## 🖥️ Utilisation rapide
 
 ```
-1. Lancer python main.py
-2. CRÉER → choisir la musique (ou glisser le fichier)
-3. Choisir la pochette (ou la glisser)
-4. Preset rapide dans l'onglet ⚡ → APPLIQUER
+1. python main.py
+2. CRÉER → musique (ou glisser le fichier)
+3. Pochette (ou glisser)
+4. Preset ⚡ → APPLIQUER
 5. Ajuster dans les onglets 🎵 🎨 📊
-6. Cliquer sur la waveform pour positionner la preview
-7. Espace pour lancer la preview audio synchronisée
-8. Onglet 🚀 → nom projet → CHECK / SHORT / COMPLET → GÉNÉRER
+6. Clic waveform → positionner la preview
+7. Espace → preview audio synchronisée
+8. Onglet 🚀 → nom → CHECK / SHORT / COMPLET → GÉNÉRER
 ```
 
 ---
@@ -264,14 +300,14 @@ python main.py
 
 | Version | Status | Contenu |
 |---|---|---|
-| **v1.0** | ✅ | Release initiale |
-| **v1.1** | ✅ | Switch 16:9↔9:16 · Drag & Drop · FFmpeg check |
-| **v1.2** | ✅ | Waveform · Artiste/Titre · Raccourcis clavier |
-| **v1.3** | ✅ | Fond dégradé · Miniatures · Plein écran |
-| **v1.4** | ✅ | Disque vinyle rotatif |
-| **v1.5** | ✅ | Couleur spectre · Fond flottant · Oscilloscope |
-| **v1.5.1** | ✅ | Fix glitch pochette · Accueil redesigné · Export cards |
-| **v1.6** | 📋 | Format carré 1:1 · Export par lots |
+| v1.0 | ✅ | Release initiale |
+| v1.1 | ✅ | Switch 16:9↔9:16 · Drag & Drop |
+| v1.2 | ✅ | Waveform · Artiste/Titre · Raccourcis |
+| v1.3 | ✅ | Fond dégradé · Miniatures · Plein écran |
+| v1.4 | ✅ | Disque vinyle rotatif |
+| v1.5 | ✅ | Couleur spectre · Fond flottant · Oscilloscope |
+| v1.5.1 | ✅ | Fix glitch · Accueil animé · Export cards |
+| v1.6 | 📋 | Format carré 1:1 · Export par lots |
 
 ---
 
@@ -282,8 +318,6 @@ pip install pyinstaller
 pyinstaller --onefile --noconsole --name "TAC_MP4_Studio" --collect-data librosa main.py
 ```
 
-Exécutable dans `dist/TAC_MP4_Studio.exe`.
-
 ---
 
 ## 🏗️ Architecture
@@ -291,16 +325,18 @@ Exécutable dans `dist/TAC_MP4_Studio.exe`.
 ```
 tac_mp4_studio/
 ├── main.py
+├── img/
+│   └── tac.png          ← logo
 ├── app/
-│   ├── config.py       ← persistance AppData
-│   ├── presets.py      ← 11 presets · 10 styles spectre
-│   ├── models.py       ← RenderSettings
-│   ├── audio.py        ← analyse librosa vectorisée
-│   ├── particles.py    ← FloatingParticle · SmokeBlob
-│   ├── renderer.py     ← rendu frame · vinyle · 10 spectres
-│   ├── exporter.py     ← pipeline FFmpeg
+│   ├── config.py
+│   ├── presets.py        ← 11 presets · 10 styles spectre
+│   ├── models.py
+│   ├── audio.py
+│   ├── particles.py
+│   ├── renderer.py       ← rendu frame · vinyle · 10 spectres
+│   ├── exporter.py
 │   └── ui/
-│       └── app.py      ← fenêtre CustomTkinter · 5 onglets
+│       └── app.py        ← fenêtre · 5 onglets · presets custom
 └── requirements.txt
 ```
 
