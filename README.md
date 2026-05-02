@@ -1,207 +1,221 @@
-# 🎧 TAC MP4 Studio — Générateur de vidéos musicales réactives en Python
+<div align="center">
 
-## Présentation
+# 🎵 TAC MP4 Studio
 
-TAC MP4 Studio est un petit logiciel Python permettant de générer automatiquement des vidéos musicales à partir d’une musique et d’une image.
+**Générateur automatique de vidéos musicales réactives**
 
-Le but est simple : créer rapidement une vidéo MP4 prête pour YouTube avec un visualizer audio réactif, sans passer par After Effects ou un logiciel de montage lourd.
+*Transforme n'importe quel audio en clip visuel professionnel en quelques clics.*
 
-## Fonctionnalités
+[![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
+[![OpenCV](https://img.shields.io/badge/OpenCV-4.8+-5C3EE8?style=for-the-badge&logo=opencv&logoColor=white)](https://opencv.org)
+[![CustomTkinter](https://img.shields.io/badge/CustomTkinter-5.2+-1F6FEB?style=for-the-badge)](https://github.com/TomSchimansky/CustomTkinter)
+[![FFmpeg](https://img.shields.io/badge/FFmpeg-required-007808?style=for-the-badge&logo=ffmpeg&logoColor=white)](https://ffmpeg.org)
+[![License](https://img.shields.io/badge/License-MIT-22c55e?style=for-the-badge)](LICENSE)
 
-- Import d’un fichier audio
-- Import d’une pochette / illustration
-- Preview vidéo avec audio
-- Spectre audio réactif
-- Détection bass / kick / aigus
-- Particules liées à la musique
-- Fumée animée et colorable
-- Plusieurs modes de spectre
-- Export MP4 en 1920x1080
-- Encodage GPU avec NVENC si disponible
-- Historique local des créations
-- Création automatique d’un dossier par projet
+</div>
 
-## Technologies utilisées
+---
 
-- Python
-- Tkinter
-- OpenCV
-- Librosa
-- NumPy
-- Pillow
-- FFmpeg
+## ✦ Aperçu
 
-## Installation
+<div align="center">
 
-### 1. Installer Python
+![TAC MP4 Studio — Interface principale](https://i.imgur.com/WghlJ6F.png)
 
-Télécharger Python :
+*Interface moderne CustomTkinter — sombre, propre, tout en une fenêtre*
 
+</div>
+
+TAC MP4 Studio génère automatiquement des **vidéos musicales réactives** à partir d'un fichier audio et d'une image. Le rendu visuel — spectre, fumée, particules, pochette animée — est entièrement synchronisé à la musique via une analyse audio frame par frame.
+
+Conçu pour les producteurs, beatmakers et artistes qui veulent un rendu professionnel sans toucher à After Effects ou Premiere.
+
+---
+
+## 🎬 Rendus
+
+<div align="center">
+
+| Format horizontal | Format vertical SHORT |
+|:---:|:---:|
+| ![Rendu horizontal](https://i.imgur.com/Ffxk8Aw.png) | ![Rendu vertical](https://i.imgur.com/tliKqPo.png) |
+| 1920×1080 · YouTube / SoundCloud | 1080×1920 · Instagram Reels / TikTok |
+
+</div>
+
+<div align="center">
+
+![Presets visuels](https://i.imgur.com/moRgO9s.png)
+
+*Presets disponibles : Dark Premium, Neon Club, Reggae Smoke, Chill Lo-Fi, Clean White…*
+
+</div>
+
+---
+
+## ⚡ Fonctionnalités
+
+### Analyse audio réactive
+- Extraction frame par frame : **RMS, kick, basse, mids, aigus**
+- Synchronisation parfaite entre le son et le visuel
+- Analyse vectorisée via numpy + librosa (~50× plus rapide qu'une boucle Python)
+
+### Spectres visuels (9 styles)
+| Style | Description |
+|---|---|
+| **Barres premium** | Barres blanches montantes classiques |
+| **Barres néon** | Dégradé rouge→bleu avec halo lumineux |
+| **Cercle radial** | Lignes rayonnantes autour de la pochette |
+| **Cercle + barres** | Combinaison orbe + spectre bas |
+| **Symétrie miroir** | Barres symétriques haut/bas — idéal SHORT |
+| **Arc plasma** | Demi-cercle coloré avec glow bas de cadre |
+| **Onde plasma** | Waveform épaisse + halo + reflet |
+| **Waveform miroir** | Forme d'onde symétrique |
+| **Ligne fine** | Ligne monochrome minimaliste |
+
+### Effets visuels
+- **Fumée** : blobs animés avec turbulence organique (Légère / Cinématique / Dense)
+- **Particules** : flottantes réactives aux kicks et aigus
+- **Pochette** : pulse sur les beats, halo glow, bordure arrondie
+- **Vignette** : cache vignette précalculé par résolution
+- **Texte** : ombre multi-couches, réactif aux kicks
+
+### 3 modes d'export
+```
+CHECK   →  15 secondes   ·  1920×1080 horizontal  ·  Aperçu rapide
+SHORT   →  1 minute      ·  1080×1920 vertical    ·  Milieu du son  (Reels / TikTok)
+COMPLET →  Son entier    ·  1920×1080 horizontal  ·  YouTube / SoundCloud
+```
+
+### Gestion de projets
+- Dossier projet auto-créé avec musique et pochette copiées
+- Historique persistant dans `%APPDATA%\DoktorP3st\TAC_MP4\`
+- Config sauvegardée (presets, réglages sliders, géométrie fenêtre)
+- Écriture config atomique (pas de corruption)
+
+---
+
+## 🖥️ Interface
+
+<div align="center">
+
+![Panneau de réglages](https://i.imgur.com/9UAfDY2.png)
+
+*Panneau droit : presets 1-clic, sliders, 9 styles de spectre, export*
+
+</div>
+
+L'interface est construite avec **CustomTkinter** — rendu natif sombre, sans dépendance Qt ni Electron.
+
+- Preview vidéo live dans la fenêtre principale
+- Lecture audio preview synchronisée (via ffplay)
+- Sliders avec debounce 600ms (pas d'écriture disque à chaque tick)
+- Contrôles désactivés pendant l'export, overlay de progression
+
+---
+
+## 📦 Installation
+
+### Prérequis
+
+**Python 3.11+**
+```
 https://www.python.org/downloads/
+```
 
-Pendant l’installation, cocher obligatoirement :
-
-```text
-Add Python to PATH
-2. Installer FFmpeg
-
-Télécharger FFmpeg :
-
+**FFmpeg** (avec ffplay) — obligatoire pour l'export et la preview audio
+```
 https://www.gyan.dev/ffmpeg/builds/
+```
+> Télécharger `ffmpeg-release-essentials.zip` → extraire dans `C:\ffmpeg\` → ajouter `C:\ffmpeg\bin` au PATH Windows
 
-Il faut une version complète contenant :
+### Installation du projet
 
-ffmpeg.exe
-ffplay.exe
+```bash
+# 1. Cloner le dépôt
+git clone https://github.com/DoktorP3st/tac-mp4-studio.git
+cd tac-mp4-studio
 
-Ajouter le dossier bin de FFmpeg au PATH Windows.
+# 2. Installer les dépendances
+pip install -r requirements.txt
 
-Vérification :
-
-ffmpeg -version
-ffplay -version
-3. Installer les dépendances Python
-
-Dans le dossier du projet :
-
-python -m pip install -r requirements.txt
-
-Contenu attendu du fichier requirements.txt :
-
-numpy
-opencv-python
-pillow
-librosa
-soundfile
-Lancement
+# 3. Lancer
 python main.py
-Utilisation
+```
 
-Au lancement, deux choix sont proposés :
+### Dépendances Python
 
-CRÉER
-HISTORIQUE
-Créer une vidéo
-Cliquer sur CRÉER
-Importer une musique
-Importer une image
-Régler le style visuel si besoin
-Lancer la preview
-Cliquer sur GÉNÉRER MP4
-Donner un nom au projet
+```
+numpy>=1.24
+opencv-python>=4.8
+Pillow>=10.0
+librosa>=0.10
+soundfile>=0.12
+customtkinter>=5.2
+```
 
-Le nom du projet est utilisé pour :
+---
 
-le dossier du projet
-le fichier audio copié
-l’image copiée
-la vidéo finale
+## 🚀 Utilisation rapide
 
-Exemple :
+```
+1. Lancer python main.py
+2. Cliquer CRÉER → importer un fichier audio (MP3, WAV, FLAC, OGG, M4A)
+3. Importer une pochette (JPG, PNG, WEBP)
+4. Choisir un preset visuel dans le panneau droit
+5. Ajuster les sliders si besoin (preview live)
+6. Onglet Export → nommer le projet → choisir CHECK / SHORT / COMPLET → GÉNÉRER
+```
 
-NomProjet/
-├── NomProjet.mp3
-├── NomProjet_cover.jpg
-└── NomProjet.mp4
-Historique
+---
 
-L’historique est accessible depuis l’écran d’accueil.
+## 🏗️ Architecture
 
-Il affiche les créations triées par date de création.
+```
+tac_mp4_studio/
+├── main.py              ← entry point (5 lignes)
+├── app/
+│   ├── config.py        ← persistance AppData
+│   ├── presets.py       ← constantes & presets visuels
+│   ├── models.py        ← RenderSettings dataclass
+│   ├── audio.py         ← analyse librosa (vectorisé)
+│   ├── particles.py     ← FloatingParticle, SmokeBlob
+│   ├── renderer.py      ← rendu frame OpenCV + PIL (9 spectres)
+│   ├── exporter.py      ← pipeline vidéo FFmpeg
+│   └── ui/
+│       ├── app.py       ← fenêtre CustomTkinter
+│       └── widgets.py   ← ScrollFrame
+└── requirements.txt
+```
 
-Chaque entrée permet de retrouver rapidement le dossier du projet.
+---
 
-Emplacement des données locales
+## 🎁 Packaging Windows (.exe)
 
-La configuration et l’historique sont stockés localement dans :
+```bash
+pip install pyinstaller
 
-%APPDATA%\DoktorP3st\TAC_MP4\config.json
+pyinstaller --onefile --noconsole \
+  --name "TAC_MP4_Studio" \
+  --collect-data librosa \
+  main.py
+```
 
-Les créations sont stockées par défaut dans :
+L'exécutable est dans `dist/TAC_MP4_Studio.exe`.  
+Distribuer avec FFmpeg ou demander à l'utilisateur de l'installer séparément.
 
-%APPDATA%\DoktorP3st\TAC_MP4\Creations
+---
 
-Le dossier racine peut être changé depuis l’interface.
+## 📄 Licence
 
-Presets inclus
+MIT — libre d'utilisation, modification et distribution.
 
-Le logiciel inclut plusieurs presets visuels :
+---
 
-Clean White
-Dark Premium
-Neon Club
-Reggae Smoke
-Chill Lo-Fi
+<div align="center">
 
-Chaque preset règle automatiquement :
+Fait avec 🎧 par **DoktorP3st**
 
-les particules
-la fumée
-la couleur de fumée
-le style de spectre
-la taille de l’image
-le pulse visuel
-Modes de spectre
+*Si ce projet t'a servi, une étoile ⭐ c'est toujours apprécié.*
 
-Modes disponibles :
-
-Barres premium
-Cercle radial
-Cercle + barres
-Waveform miroir
-Ligne fine
-Export vidéo
-
-L’export est fait en MP4 avec :
-
-vidéo H.264
-audio AAC 320 kbps
-résolution 1920x1080
-format compatible YouTube
-
-Si une carte NVIDIA compatible est disponible, l’encodage utilise :
-
-h264_nvenc
-
-Sinon, le logiciel utilise automatiquement :
-
-libx264
-Objectif du projet
-
-L’objectif est de créer un outil simple pour produire des vidéos musicales automatiquement, notamment pour :
-
-YouTube
-remix
-covers IA
-playlists
-visualizers
-chaînes musicales automatisées
-Limitations actuelles
-Interface basée sur Tkinter
-Pas encore de batch export
-Pas encore de timeline avancée
-Pas encore de drag and drop
-Roadmap possible
-
-Améliorations possibles :
-
-interface plus moderne
-export batch
-templates visuels avancés
-meilleure synchronisation BPM
-miniatures dans l’historique
-édition d’un ancien projet
-système de presets personnalisés
-Contribution
-
-Les retours sont bienvenus :
-
-idées d’effets visuels
-optimisation du rendu
-amélioration de l’interface
-nouveaux presets
-Licence
-
-Projet personnel / expérimental.
-
-À adapter selon l’usage souhaité.
+</div>
