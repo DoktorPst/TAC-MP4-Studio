@@ -787,15 +787,11 @@ def _make_sleeve(cover_pil: Image.Image, side: int) -> Image.Image:
     md.rounded_rectangle((0, 0, side - 1, side - 1), radius=radius_corner, fill=255)
     result.paste(sq.convert("RGBA"), mask=mask)
 
-    # Bordure fine
+    # Bordure fine + reflet haut (une seule passe, inséré d'1px pour eviter l'artefact de bord)
     bd = ImageDraw.Draw(result)
-    bd.rounded_rectangle((0, 0, side - 1, side - 1),
-                          radius=radius_corner,
-                          outline=(220, 220, 220, 90), width=2)
-    # Surbrillance bord haut/gauche (effet 3D léger)
-    bd.rounded_rectangle((1, 1, side - 2, side // 3),
-                          radius=radius_corner,
-                          outline=(255, 255, 255, 30), width=1)
+    bd.rounded_rectangle((1, 1, side - 2, side - 2),
+                          radius=max(3, radius_corner - 1),
+                          outline=(220, 220, 220, 85), width=2)
     return result
 
 
@@ -824,18 +820,15 @@ def draw_vinyl_disk(
     sleeve_side = max(40, base_side + pulse_px)
 
     # Vinyle : plus petit que la version précédente, sort seulement à droite
-    vinyl_r = int(sleeve_side * 0.47)
+    vinyl_r = int(sleeve_side * 0.52)
 
     # ── Centre de la composition ───────────────────────────────────────────────
-    # Pochette décalée à gauche pour laisser de la place au vinyle à droite
     group_cx = width // 2 - int(sleeve_side * 0.22)
     group_cy = int(height * 0.27) if is_v else height // 2 - int(height * 0.07)
 
-    # Vinyle centré à 62% du côté de la pochette vers la droite
-    # → bord gauche du vinyle = group_cx + 0.15*S (bien dans la pochette)
-    # → seule la partie droite dépasse de la pochette (une seule face visible)
+    # Vinyle décalé à droite, centré VERTICALEMENT avec la pochette
     vinyl_cx = group_cx + int(sleeve_side * 0.62)
-    vinyl_cy = group_cy + int(sleeve_side * 0.05)
+    vinyl_cy = group_cy   # même centre vertical que la pochette
 
     # ── Ombres ────────────────────────────────────────────────────────────────
     shadow = np.zeros_like(frame)
