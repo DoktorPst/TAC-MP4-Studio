@@ -106,6 +106,19 @@ def compute_audio_features(
     spec_db = librosa.amplitude_to_db(stft_amp, ref=np.max)
     spec = np.clip((spec_db + 80.0) / 80.0, 0.0, 1.0).astype(np.float32)
 
+    # Oscilloscope : 512 samples bruts par frame (Update 5)
+    osc_len = 512
+    raw_frames = np.zeros((frames, osc_len), dtype=np.float32)
+    for fi in range(frames):
+        center = fi * hop
+        start = max(0, center - osc_len // 2)
+        end = start + osc_len
+        if end > len(y):
+            start = max(0, len(y) - osc_len)
+            end = len(y)
+        seg = y[start:end]
+        raw_frames[fi, :len(seg)] = seg
+
     return {
         "rms":      _resize_1d(rms,    frames),
         "kick":     _resize_1d(onset,  frames),
@@ -113,5 +126,6 @@ def compute_audio_features(
         "mid":      _resize_1d(mid,    frames),
         "high":     _resize_1d(high,   frames),
         "spec":     _resize_2d_time(spec, frames),
+        "raw":      raw_frames,
         "duration": duration,
     }

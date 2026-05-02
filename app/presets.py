@@ -1,4 +1,4 @@
-"""Constantes visuelles, presets et palettes couleurs."""
+"""Constantes visuelles, presets et palettes couleurs — Update 5."""
 from __future__ import annotations
 
 # ── Dimensions ────────────────────────────────────────────────────────────────
@@ -28,8 +28,12 @@ REGGAE_PALETTE: list[tuple[int, int, int]] = [
     (25, 255, 70),
 ]
 
-# ── Presets globaux ───────────────────────────────────────────────────────────
+# ── Presets globaux — Update 5 : tous les champs supportés ───────────────────
+# Clés optionnelles : vinyl_mode, vinyl_black, spectrum_color,
+#                     floating_bg, bg_mode, gradient_top, gradient_bottom
 GLOBAL_PRESETS: dict[str, dict] = {
+
+    # ── Presets classiques (mis à jour) ───────────────────────────────────────
     "Clean White": {
         "particle_preset": "Épuré",
         "smoke_preset":    "Légère",
@@ -39,6 +43,10 @@ GLOBAL_PRESETS: dict[str, dict] = {
         "spectrum_y":      0.90,
         "image_zoom":      1.00,
         "pulse_strength":  0.85,
+        "vinyl_mode":      False,
+        "spectrum_color":  "#ffffff",
+        "floating_bg":     False,
+        "bg_mode":         "photo",
     },
     "Dark Premium": {
         "particle_preset": "Premium",
@@ -49,6 +57,10 @@ GLOBAL_PRESETS: dict[str, dict] = {
         "spectrum_y":      0.90,
         "image_zoom":      1.00,
         "pulse_strength":  1.10,
+        "vinyl_mode":      False,
+        "spectrum_color":  "#ffffff",
+        "floating_bg":     False,
+        "bg_mode":         "photo",
     },
     "Neon Club": {
         "particle_preset": "Énergie",
@@ -59,6 +71,10 @@ GLOBAL_PRESETS: dict[str, dict] = {
         "spectrum_y":      0.88,
         "image_zoom":      0.96,
         "pulse_strength":  1.45,
+        "vinyl_mode":      False,
+        "spectrum_color":  "#ffffff",
+        "floating_bg":     False,
+        "bg_mode":         "photo",
     },
     "Reggae Smoke": {
         "particle_preset": "Énergie",
@@ -69,6 +85,10 @@ GLOBAL_PRESETS: dict[str, dict] = {
         "spectrum_y":      0.88,
         "image_zoom":      1.00,
         "pulse_strength":  1.45,
+        "vinyl_mode":      False,
+        "spectrum_color":  "#22ff44",
+        "floating_bg":     False,
+        "bg_mode":         "photo",
     },
     "Chill Lo-Fi": {
         "particle_preset": "Pluie lumineuse",
@@ -79,6 +99,10 @@ GLOBAL_PRESETS: dict[str, dict] = {
         "spectrum_y":      0.91,
         "image_zoom":      1.05,
         "pulse_strength":  0.75,
+        "vinyl_mode":      False,
+        "spectrum_color":  "#ffffff",
+        "floating_bg":     True,
+        "bg_mode":         "photo",
     },
     "Short Vertical": {
         "particle_preset": "Premium",
@@ -89,6 +113,94 @@ GLOBAL_PRESETS: dict[str, dict] = {
         "spectrum_y":      0.82,
         "image_zoom":      1.05,
         "pulse_strength":  1.20,
+        "vinyl_mode":      False,
+        "spectrum_color":  "#ffffff",
+        "floating_bg":     False,
+        "bg_mode":         "photo",
+    },
+
+    # ── Nouveaux presets (Update 4 + 5) ───────────────────────────────────────
+    "Vinyl Classic": {
+        "particle_preset": "Épuré",
+        "smoke_preset":    "Légère",
+        "smoke_color":     "Blanc",
+        "spectrum_style":  "Barres premium",
+        "spectrum_size":   1.00,
+        "spectrum_y":      0.90,
+        "image_zoom":      1.00,
+        "pulse_strength":  1.00,
+        "vinyl_mode":      True,
+        "vinyl_black":     True,     # vinyle noir classique
+        "spectrum_color":  "#e8c97a",  # or chaud
+        "floating_bg":     False,
+        "bg_mode":         "gradient",
+        "gradient_top":    "#1a0e04",
+        "gradient_bottom": "#0d0808",
+    },
+    "Vinyl Gold": {
+        "particle_preset": "Premium",
+        "smoke_preset":    "Cinématique",
+        "smoke_color":     "Or chaud",
+        "spectrum_style":  "Cercle + barres",
+        "spectrum_size":   1.10,
+        "spectrum_y":      0.89,
+        "image_zoom":      1.05,
+        "pulse_strength":  1.20,
+        "vinyl_mode":      True,
+        "vinyl_black":     False,    # image visible sur le vinyle
+        "spectrum_color":  "#d4a840",
+        "floating_bg":     True,
+        "bg_mode":         "photo",
+    },
+    "Acid Wave": {
+        "particle_preset": "Énergie",
+        "smoke_preset":    "Dense",
+        "smoke_color":     "Vert",
+        "spectrum_style":  "Oscilloscope",
+        "spectrum_size":   1.15,
+        "spectrum_y":      0.88,
+        "image_zoom":      1.00,
+        "pulse_strength":  1.35,
+        "vinyl_mode":      False,
+        "spectrum_color":  "#00ff88",
+        "floating_bg":     True,
+        "bg_mode":         "gradient",
+        "gradient_top":    "#001a0a",
+        "gradient_bottom": "#000d05",
+    },
+    "Purple Dream": {
+        "particle_preset": "Pluie lumineuse",
+        "smoke_preset":    "Cinématique",
+        "smoke_color":     "Violet",
+        "spectrum_style":  "Cercle radial",
+        "spectrum_size":   1.05,
+        "spectrum_y":      0.90,
+        "image_zoom":      1.05,
+        "pulse_strength":  0.90,
+        "vinyl_mode":      True,
+        "vinyl_black":     False,
+        "spectrum_color":  "#b06aff",
+        "floating_bg":     True,
+        "bg_mode":         "gradient",
+        "gradient_top":    "#120a1e",
+        "gradient_bottom": "#0a0512",
+    },
+    "Midnight Vinyl": {
+        "particle_preset": "Premium",
+        "smoke_preset":    "Cinématique",
+        "smoke_color":     "Bleu néon",
+        "spectrum_style":  "Symétrie miroir",
+        "spectrum_size":   1.10,
+        "spectrum_y":      0.88,
+        "image_zoom":      1.00,
+        "pulse_strength":  1.15,
+        "vinyl_mode":      True,
+        "vinyl_black":     True,
+        "spectrum_color":  "#4da8ff",
+        "floating_bg":     False,
+        "bg_mode":         "gradient",
+        "gradient_top":    "#040810",
+        "gradient_bottom": "#020509",
     },
 }
 
@@ -116,5 +228,6 @@ SPECTRUM_STYLES: list[str] = [
     "Arc plasma",
     "Onde plasma",
     "Waveform miroir",
+    "Oscilloscope",
     "Ligne fine",
 ]

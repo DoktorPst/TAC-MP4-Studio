@@ -183,6 +183,7 @@ def render_video(
                 "high": float(features["high"][i]),
             }
 
+            raw_f = features["raw"][i] if "raw" in features else None
             frame, particles, smoke_blobs, smoothed, vinyl_angle = render_frame(
                 bg,
                 cover,
@@ -193,6 +194,8 @@ def render_video(
                 smoothed,
                 settings,
                 vinyl_angle,
+                frame_idx=i,
+                raw_frame=raw_f,
             )
 
             writer.write(frame)
