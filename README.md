@@ -49,7 +49,7 @@ Conçu pour les producteurs, beatmakers et artistes qui veulent un rendu profess
 
 <div align="center">
 
-![Interface principale 1920x1080](https://i.imgur.com/w0snPsg.png)
+![Interface principale 1920x1080](https://i.imgur.com/hVCWmPk.png)
 
 *Éditeur complet — waveform interactive · preview live · 9 styles de spectre · presets 1 clic*
 
@@ -61,7 +61,7 @@ Conçu pour les producteurs, beatmakers et artistes qui veulent un rendu profess
 
 <div align="center">
 
-![Rendu SHORT vertical 1080x1920](https://i.imgur.com/w0snPsg.png)
+![Rendu SHORT vertical 1080x1920](https://i.imgur.com/hVCWmPk.png)
 
 *Format 1080×1920 — Milieu automatique du son · Idéal Instagram Reels · TikTok · YouTube Shorts*
 
@@ -160,6 +160,30 @@ Deux champs distincts dans le panneau texte. Sur la vidéo, l'artiste s'affiche 
 **📂 Drag & Drop** — Glisse directement tes fichiers audio et image depuis l'Explorateur Windows sur la fenêtre.
 
 ---
+
+---
+
+## 🆕 Update 4 — Pochette + Vinyle rotatif
+
+Toggle **🎵 Disque vinyle** dans la section Ambiance de l'éditeur.
+
+Au lieu d'afficher la pochette simple, le logiciel génère une composition à deux plans :
+
+<div align="center">
+
+![Pochette + Vinyle rotatif](https://i.imgur.com/VaMRIP6.png)
+
+*Composition pochette sleeve au premier plan · vinyle rotatif à droite · réactif aux beats*
+
+</div>
+
+**Avant-plan — Pochette sleeve**
+La pochette s'affiche avec coins arrondis, fine bordure lumineuse et micro-effet 3D. Elle pulse sur les beats.
+
+**Arrière-plan — Vinyle rotatif**
+Un disque vinyle sort à droite derrière la pochette — environ 50% visible. Il tourne en continu et réagit à la musique : basses = accélération, kicks = saccades. Les sillons restent fixes (comme un vrai vinyle), le reflet crescent aussi. Trou de broche présent.
+
+Compatible **16:9 et 9:16** — la composition s'adapte automatiquement au format vertical.
 
 ---
 
@@ -272,7 +296,9 @@ tac_mp4_studio/
 |---|---|---|
 | **Update 1** | ✅ Stable | Switch preview 16:9↔9:16 · Vérif FFmpeg · Nom obligatoire · Drag & Drop |
 | **Update 2** | ✅ Stable | Waveform cliquable · Artiste + Titre séparés · Raccourcis clavier |
-| **Update 3** | 📋 Planifié | Fond dégradé · Miniatures historique · Mode plein écran preview |
+| **Update 3** | ✅ Stable | Fond dégradé · Miniatures historique · Mode plein écran preview |
+| **Update 4** | ✅ Stable | Pochette sleeve + Vinyle rotatif réactif |
+| **Update 5** | 📋 Planifié | Couleur du spectre · Fond flottant · Oscilloscope |
 
 ---
 
