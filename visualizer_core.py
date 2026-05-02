@@ -27,12 +27,18 @@ PREVIEW_SECONDS = 22
 SMOKE_COLORS = {
     "Blanc": (235, 235, 235),
     "Or chaud": (214, 172, 86),
-    "Rouge": (215, 70, 65),
+    "Rouge": (255, 45, 35),
     "Bleu néon": (75, 145, 255),
     "Violet": (168, 95, 255),
-    "Vert": (92, 220, 130),
-    "Reggae": (90, 210, 95),
+    "Vert": (35, 255, 80),
+    "Reggae": (255, 220, 20),
 }
+
+REGGAE_PALETTE = [
+    (255, 35, 25),    # rouge pétant
+    (255, 225, 20),   # jaune pétant
+    (25, 255, 70),    # vert pétant
+]
 
 GLOBAL_PRESETS = {
     "Clean White": {
@@ -66,14 +72,14 @@ GLOBAL_PRESETS = {
         "pulse_strength": 1.45,
     },
     "Reggae Smoke": {
-        "particle_preset": "Premium",
+        "particle_preset": "Énergie",
         "smoke_preset": "Dense",
         "smoke_color": "Reggae",
-        "spectrum_style": "Waveform miroir",
-        "spectrum_size": 1.10,
+        "spectrum_style": "Cercle + barres",
+        "spectrum_size": 1.20,
         "spectrum_y": 0.88,
         "image_zoom": 1.00,
-        "pulse_strength": 1.25,
+        "pulse_strength": 1.45,
     },
     "Chill Lo-Fi": {
         "particle_preset": "Pluie lumineuse",
@@ -124,6 +130,8 @@ class RenderSettings:
     background_blur: int = 38
     output_width: int = WIDTH
     output_height: int = HEIGHT
+    text_x: float = 0.50
+    text_y: float = 0.70
 
 
 class FloatingParticle:
@@ -172,7 +180,8 @@ class SmokeBlob:
         self.speed = random.uniform(0.15, 0.8)
         self.drift = random.uniform(-0.45, 0.45)
         self.phase = random.uniform(0, math.tau)
-        self.alpha = random.uniform(22, 70)
+        self.alpha = random.uniform(28, 85)
+        self.color_index = random.randint(0, 2)
 
     def update(self, bass: float, kick: float, preset: dict):
         self.y -= self.speed * (1.0 + bass * 3.5 + kick * 2.0) * preset["speed"]
@@ -286,7 +295,7 @@ def overlay_center(base, overlay, bass, kick, pulse_strength):
     base[y:y + h, x:x + w] = overlay
 
 
-def draw_reactive_text(frame, text, rms, kick):
+def draw_reactive_text(frame, text, rms, kick, text_x=0.50, text_y=0.70):
     if not text.strip():
         return
 
@@ -317,13 +326,13 @@ def draw_reactive_text(frame, text, rms, kick):
     lines = lines[:2]
 
     line_h = int(font_size * 1.16)
-    y = int(height * 0.70) - len(lines) * line_h // 2
+    y = int(height * text_y) - len(lines) * line_h // 2
     text_alpha = int(210 + kick * 45)
 
     for idx, line in enumerate(lines):
         bbox = draw.textbbox((0, 0), line, font=font)
         tw = bbox[2] - bbox[0]
-        x = (width - tw) // 2
+        x = int(width * text_x - tw / 2)
         yy = y + idx * line_h
 
         for offset, alpha in [(5, 60), (2, 120)]:
@@ -531,13 +540,15 @@ def draw_smoke(frame, smoke_blobs, bass, kick, settings):
     if len(smoke_blobs) > target:
         del smoke_blobs[target:]
 
-    rgb = SMOKE_COLORS.get(settings.smoke_color, SMOKE_COLORS["Blanc"])
-    color_bgr = (rgb[2], rgb[1], rgb[0])
-
     layer = np.zeros_like(frame)
 
     for blob in smoke_blobs:
         blob.update(bass, kick, preset)
+        if settings.smoke_color == "Reggae":
+            rgb = REGGAE_PALETTE[blob.color_index % len(REGGAE_PALETTE)]
+        else:
+            rgb = SMOKE_COLORS.get(settings.smoke_color, SMOKE_COLORS["Blanc"])
+        color_bgr = (rgb[2], rgb[1], rgb[0])
         blob.draw(layer, color_bgr, bass, kick, preset)
 
     blur = preset["blur"]
@@ -576,7 +587,7 @@ def render_frame(bg, cover, particles, smoke_blobs, spec_frame, metrics, smoothe
 
     draw_audio_orb(frame, smoothed_bands, bass, kick, settings)
     overlay_center(frame, cover, bass, kick, settings.pulse_strength)
-    draw_reactive_text(frame, title, rms, kick)
+    draw_reactive_text(frame, title, rms, kick, settings.text_x, settings.text_y)
 
     if settings.spectrum_style != "Cercle radial":
         draw_spectrum(frame, smoothed_bands, rms, bass, mid, high, settings)
@@ -586,15 +597,22 @@ def render_frame(bg, cover, particles, smoke_blobs, spec_frame, metrics, smoothe
 
 
 def add_audio_to_video(temp_video, audio_path, output_path, duration, start_offset):
+    """
+    Combine vidéo muette + audio.
+    Important : l'audio est le premier input avec -ss AVANT -i pour garantir que SHORT
+    prend bien le milieu de la musique, pas le début.
+    """
+    seek = max(0.0, float(start_offset or 0.0))
+
     if ffmpeg_has_nvenc():
         cmd = [
             "ffmpeg", "-y",
-            "-i", temp_video,
-            "-ss", f"{start_offset:.3f}",
+            "-ss", f"{seek:.3f}",
             "-i", audio_path,
+            "-i", temp_video,
             "-t", f"{duration:.3f}",
-            "-map", "0:v:0",
-            "-map", "1:a:0",
+            "-map", "1:v:0",
+            "-map", "0:a:0",
             "-c:v", "h264_nvenc",
             "-preset", "p6",
             "-tune", "hq",
@@ -619,12 +637,12 @@ def add_audio_to_video(temp_video, audio_path, output_path, duration, start_offs
 
     cmd = [
         "ffmpeg", "-y",
-        "-i", temp_video,
-        "-ss", f"{start_offset:.3f}",
+        "-ss", f"{seek:.3f}",
         "-i", audio_path,
+        "-i", temp_video,
         "-t", f"{duration:.3f}",
-        "-map", "0:v:0",
-        "-map", "1:a:0",
+        "-map", "1:v:0",
+        "-map", "0:a:0",
         "-c:v", "libx264",
         "-preset", "slow",
         "-crf", "16",
@@ -638,7 +656,6 @@ def add_audio_to_video(temp_video, audio_path, output_path, duration, start_offs
         output_path,
     ]
     run_ffmpeg(cmd)
-
 
 def render_video(settings: RenderSettings, progress_callback=None):
     require_ffmpeg()

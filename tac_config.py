@@ -36,6 +36,9 @@ def default_config() -> dict:
             "pulse_strength": 1.10,
             "duration": "",
             "preview_start": "0",
+            "window_geometry": "1220x780+80+40",
+            "text_x": 0.50,
+            "text_y": 0.70,
             "title_text": "",
         },
     }
