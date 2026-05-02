@@ -125,6 +125,14 @@ COMPLET →  Son entier   ·  1920×1080 horizontal  ·  YouTube · SoundCloud
 
 ### Update 2 — Waveform · Artiste/Titre · Raccourcis clavier
 
+<div align="center">
+
+![Fond dégradé configurable](https://i.imgur.com/K4p0h4l.png)
+
+*Fond dégradé — color pickers natifs · aperçu live dans la preview*
+
+</div>
+
 **🎚 Waveform globale cliquable**
 Une barre de forme d'onde apparaît sous la preview dès l'ouverture de l'éditeur. Elle représente la totalité du son, avec la zone preview surlignée en violet. Un **clic** déplace le point de départ de la preview à cet instant. Pendant la lecture, un curseur vert avance en temps réel.
 
