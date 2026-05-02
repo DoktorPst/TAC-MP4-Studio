@@ -16,6 +16,8 @@ from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont
 
 WIDTH = 1920
 HEIGHT = 1080
+SHORT_WIDTH = 1080
+SHORT_HEIGHT = 1920
 PREVIEW_W = 960
 PREVIEW_H = 540
 FPS = 30
@@ -120,6 +122,8 @@ class RenderSettings:
     image_zoom: float
     pulse_strength: float
     background_blur: int = 38
+    output_width: int = WIDTH
+    output_height: int = HEIGHT
 
 
 class FloatingParticle:
@@ -648,10 +652,12 @@ def render_video(settings: RenderSettings, progress_callback=None):
         progress_callback("Analyse audio bass/kick/aigus...")
 
     features = compute_audio_features(settings.audio_path, FPS, settings.duration_limit, settings.start_offset)
-    bg, cover = load_cover_image(settings.image_path, settings.background_blur, settings.image_zoom, WIDTH, HEIGHT)
+    out_w = int(getattr(settings, "output_width", WIDTH))
+    out_h = int(getattr(settings, "output_height", HEIGHT))
+    bg, cover = load_cover_image(settings.image_path, settings.background_blur, settings.image_zoom, out_w, out_h)
 
     particles, smoke_blobs = [], []
-    writer = cv2.VideoWriter(temp_video, cv2.VideoWriter_fourcc(*"mp4v"), FPS, (WIDTH, HEIGHT))
+    writer = cv2.VideoWriter(temp_video, cv2.VideoWriter_fourcc(*"mp4v"), FPS, (out_w, out_h))
 
     if not writer.isOpened():
         raise RuntimeError("Impossible d'ouvrir le moteur vidéo OpenCV.")

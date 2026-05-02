@@ -23,6 +23,8 @@ from visualizer_core import (
     PREVIEW_SECONDS,
     PREVIEW_W,
     PREVIEW_H,
+    SHORT_WIDTH,
+    SHORT_HEIGHT,
     FPS,
     RenderSettings,
     compute_audio_features,
@@ -91,7 +93,8 @@ class App(tk.Tk):
         self.duration = tk.StringVar(value=settings.get("duration", ""))
         self.preview_start = tk.StringVar(value=settings.get("preview_start", "0"))
 
-        self.project_name = ""
+        self.project_name_var = tk.StringVar(value="")
+        self.export_mode = tk.StringVar(value=settings.get("export_mode", "Complet"))
         self.output_path = ""
 
         self.preview_ready = False
@@ -226,7 +229,8 @@ class App(tk.Tk):
 
         items = self.sorted_history()
         for item in items:
-            self.history_listbox.insert(tk.END, f"{item.get('created_at', '')}  |  {item.get('name', 'Sans nom')}")
+            kind = item.get("type", "horizontal").upper()
+            self.history_listbox.insert(tk.END, f"{item.get('created_at', '')}  |  [{kind}]  {item.get('name', 'Sans nom')}")
 
         actions = ttk.Frame(container, style="Root.TFrame")
         actions.pack(fill="x", pady=(12, 0))
@@ -324,9 +328,35 @@ class App(tk.Tk):
         self.small_button(tab_export, "Analyser depuis ce départ", self.prepare_preview)
 
         self.section(tab_export, "Export")
-        self.entry(tab_export, "Durée export vide = complète", self.duration)
-        ttk.Label(tab_export, text="Nom du projet demandé au lancement export.\nIl servira au dossier, musique, image et vidéo.", style="Muted.TLabel").pack(anchor="w", padx=8, pady=(4, 12))
-        ttk.Button(tab_export, text="GÉNÉRER MP4", command=self.start_export, style="Accent.TButton").pack(fill="x", pady=(14, 4), padx=8, ipady=10)
+        self.entry(tab_export, "Nom du projet", self.project_name_var)
+
+        ttk.Label(tab_export, text="Durée export horizontal", style="Muted.TLabel").pack(anchor="w", padx=8)
+        duration_cards = ttk.Frame(tab_export, style="Panel.TFrame")
+        duration_cards.pack(fill="x", padx=8, pady=(4, 10))
+
+        self.duration_buttons = {}
+        self.duration_button(duration_cards, "15s", "CHECK", "test rapide")
+        self.duration_button(duration_cards, "1min", "1 MIN", "milieu musique")
+        self.duration_button(duration_cards, "Complet", "COMPLET", "musique entière")
+        self.refresh_duration_buttons()
+
+        ttk.Label(
+            tab_export,
+            text="Le mode 1 minute prend automatiquement une minute vers le milieu de la musique.",
+            style="Muted.TLabel",
+            wraplength=300
+        ).pack(anchor="w", padx=8, pady=(4, 12))
+
+        ttk.Button(tab_export, text="GÉNÉRER MP4 HORIZONTAL", command=self.start_export, style="Accent.TButton").pack(fill="x", pady=(14, 4), padx=8, ipady=10)
+
+        ttk.Button(tab_export, text="CONVERTIR EN FORMAT SHORT", command=self.start_short_export).pack(fill="x", pady=(6, 4), padx=8, ipady=10)
+
+        ttk.Label(
+            tab_export,
+            text="Short = 1080x1920, durée fixe 1 minute, extrait centré au milieu.",
+            style="Muted.TLabel",
+            wraplength=300
+        ).pack(anchor="w", padx=8, pady=(4, 12))
 
         self.prepare_preview()
 
@@ -349,6 +379,38 @@ class App(tk.Tk):
 
     def small_button(self, parent, text, command):
         ttk.Button(parent, text=text, command=command).pack(fill="x", pady=3, padx=8, ipady=4)
+
+    def duration_button(self, parent, value, title, subtitle):
+        btn = tk.Button(
+            parent,
+            text=f"{title}\n{subtitle}",
+            command=lambda v=value: self.set_export_mode(v),
+            bg="#1f1f1f",
+            fg="#ffffff",
+            activebackground="#ffffff",
+            activeforeground="#000000",
+            relief="flat",
+            font=("Segoe UI", 9, "bold"),
+            height=2,
+            cursor="hand2",
+        )
+        btn.pack(side="left", fill="x", expand=True, padx=3, pady=2)
+        self.duration_buttons[value] = btn
+
+    def set_export_mode(self, value):
+        self.export_mode.set(value)
+        self.persist_config()
+        self.refresh_duration_buttons()
+
+    def refresh_duration_buttons(self):
+        if not hasattr(self, "duration_buttons"):
+            return
+        selected = self.export_mode.get()
+        for value, btn in self.duration_buttons.items():
+            if value == selected:
+                btn.configure(bg="#ffffff", fg="#000000", activebackground="#dddddd", activeforeground="#000000")
+            else:
+                btn.configure(bg="#1f1f1f", fg="#ffffff", activebackground="#333333", activeforeground="#ffffff")
 
     def slider(self, parent, label, var, minv, maxv):
         row = ttk.Frame(parent, style="Panel.TFrame")
@@ -411,6 +473,7 @@ class App(tk.Tk):
             "pulse_strength": self.pulse_strength.get(),
             "duration": self.duration.get(),
             "preview_start": self.preview_start.get(),
+            "export_mode": self.export_mode.get(),
         }
         save_config(self.config_data)
 
@@ -427,15 +490,44 @@ class App(tk.Tk):
         self.persist_config()
         self.reload_preview_visuals_only()
 
-    def current_settings(self, preview=False):
-        duration_text = self.duration.get().strip().replace(",", ".")
-        duration = float(duration_text) if duration_text else None
+    def get_audio_duration_seconds(self) -> float:
+        try:
+            import librosa
+            return float(librosa.get_duration(path=self.audio_path))
+        except Exception:
+            return 0.0
 
+    def get_export_timing(self) -> tuple[float | None, float]:
+        """
+        Retourne (duration_limit, start_offset).
+        - 15s : démarre au début.
+        - 1min : extrait centré au milieu de la musique.
+        - Complet : export entier.
+        """
+        mode = self.export_mode.get()
+
+        if mode == "15s":
+            return 15.0, 0.0
+
+        if mode == "1min":
+            total = self.get_audio_duration_seconds()
+            if total <= 60:
+                return None, 0.0
+            return 60.0, max(0.0, (total - 60.0) / 2.0)
+
+        return None, 0.0
+
+    def current_settings(self, preview=False, short_mode=False):
         if preview:
             duration = PREVIEW_SECONDS
-
-        start_text = self.preview_start.get().strip().replace(",", ".")
-        start = float(start_text) if start_text else 0.0
+            start_text = self.preview_start.get().strip().replace(",", ".")
+            start = float(start_text) if start_text else 0.0
+        elif short_mode:
+            total = self.get_audio_duration_seconds()
+            duration = 60.0 if total > 60 else None
+            start = max(0.0, (total - 60.0) / 2.0) if total > 60 else 0.0
+        else:
+            duration, start = self.get_export_timing()
 
         return RenderSettings(
             audio_path=self.audio_path,
@@ -453,26 +545,32 @@ class App(tk.Tk):
             image_zoom=float(self.image_zoom.get()),
             pulse_strength=float(self.pulse_strength.get()),
             background_blur=38,
+            output_width=SHORT_WIDTH if short_mode else 1920,
+            output_height=SHORT_HEIGHT if short_mode else 1080,
         )
 
-    def ask_project_name_and_prepare_folder(self):
+    def ask_project_name_and_prepare_folder(self, suffix=""):
         if not self.project_root:
             self.choose_project_root()
 
-        project_name = simpledialog.askstring("Nom du projet", "Nom du projet :", parent=self)
+        project_name = self.project_name_var.get().strip()
 
         if not project_name:
+            project_name = simpledialog.askstring("Nom du projet", "Nom du projet :", parent=self) or ""
+
+        if not project_name.strip():
             raise RuntimeError("Nom du projet obligatoire.")
 
         clean_name = safe_name(project_name)
         root = Path(self.project_root)
         root.mkdir(parents=True, exist_ok=True)
 
-        project_dir = root / clean_name
+        folder_name = f"{clean_name}{suffix}"
+        project_dir = root / folder_name
         counter = 2
 
         while project_dir.exists():
-            project_dir = root / f"{clean_name}_{counter}"
+            project_dir = root / f"{folder_name}_{counter}"
             counter += 1
 
         project_dir.mkdir(parents=True, exist_ok=True)
@@ -624,6 +722,72 @@ class App(tk.Tk):
                 pass
             self.ffplay_process = None
 
+    def start_short_export(self):
+        if self.is_rendering:
+            return
+
+        if not self.audio_path or not self.image_path:
+            messagebox.showerror("Erreur", "Musique ou pochette manquante.")
+            return
+
+        try:
+            project_name, project_dir = self.ask_project_name_and_prepare_folder(suffix="_SHORT")
+            short_name = f"{project_name}_SHORT"
+            project_audio, project_image = self.copy_assets_to_project(project_dir, short_name)
+
+            self.audio_path = project_audio
+            self.image_path = project_image
+            self.short_output_path = str(project_dir / f"{short_name}.mp4")
+
+            self.persist_config()
+
+        except Exception as exc:
+            messagebox.showerror("Short", str(exc))
+            return
+
+        settings = self.current_settings(preview=False, short_mode=True)
+        settings.output_path = self.short_output_path
+
+        self.stop_audio()
+        self.is_rendering = True
+        self.status_var.set(f"Export SHORT : {project_name}...")
+
+        def worker():
+            try:
+                render_video(settings, progress_callback=lambda t: self.after(0, lambda txt=t: self.status_var.set(txt)))
+
+                self.history.append({
+                    "name": short_name,
+                    "folder": str(project_dir),
+                    "video": settings.output_path,
+                    "audio": settings.audio_path,
+                    "image": settings.image_path,
+                    "type": "short",
+                    "type": "horizontal",
+                    "created_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+                })
+
+                self.persist_config()
+
+                self.after(
+                    0,
+                    lambda: messagebox.showinfo(
+                        "Short terminé",
+                        f"Dossier créé :\n{project_dir}\n\nShort généré :\n{settings.output_path}",
+                    ),
+                )
+                self.after(0, lambda: open_file(str(project_dir)))
+
+            except Exception as exc:
+                msg = str(exc)
+                self.after(0, lambda: messagebox.showerror("Erreur short", msg))
+                self.after(0, lambda: self.status_var.set("Erreur export short."))
+
+            finally:
+                self.is_rendering = False
+
+        threading.Thread(target=worker, daemon=True).start()
+
     def start_export(self):
         if self.is_rendering:
             return
@@ -651,7 +815,7 @@ class App(tk.Tk):
 
         self.stop_audio()
         self.is_rendering = True
-        self.status_var.set(f"Export final : {project_name}...")
+        self.status_var.set(f"Export final : {project_name} ({self.export_mode.get()})...")
 
         def worker():
             try:
