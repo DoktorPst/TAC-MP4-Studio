@@ -44,8 +44,7 @@ Conçu pour les producteurs, beatmakers et artistes qui veulent un rendu profess
 
 <div align="center">
 
-<!-- REMPLACER PAR L'IMAGE INTERFACE FOURNIE -->
-![Interface éditeur](https://i.imgur.com/PLACEHOLDER.png)
+![Interface éditeur](https://i.imgur.com/Yo1x0k4.png)
 
 *Interface éditeur avec preview live et panneau de réglages*
 
