@@ -549,54 +549,192 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
         self._clear_main()
         self._set_status("Accueil")
 
-        # Fond subtil — deux rectangles de couleur
-        bg_left = ctk.CTkFrame(self.main, fg_color="#0d0420", corner_radius=0)
-        bg_left.place(relx=0, rely=0, relwidth=0.5, relheight=1)
-        bg_right = ctk.CTkFrame(self.main, fg_color="#050505", corner_radius=0)
-        bg_right.place(relx=0.5, rely=0, relwidth=0.5, relheight=1)
+        import math, random
 
-        # Bloc central
-        center = ctk.CTkFrame(self.main, fg_color="transparent")
-        center.place(relx=0.5, rely=0.48, anchor="center")
+        # ── Canvas plein écran : halo violet radial + barres spectre statiques ──
+        canvas = tk.Canvas(self.main, bg="#080808", highlightthickness=0)
+        canvas.place(relx=0, rely=0, relwidth=1, relheight=1)
 
-        # Logo
-        logo_row = ctk.CTkFrame(center, fg_color="transparent")
-        logo_row.pack()
-        ctk.CTkLabel(logo_row, text="TAC",
-                     font=ctk.CTkFont("Segoe UI", 72, "bold"),
-                     text_color=ACCLT).pack(side="left")
-        ctk.CTkLabel(logo_row, text=" MP4",
-                     font=ctk.CTkFont("Segoe UI", 72, "bold"),
-                     text_color=TEXT).pack(side="left")
+        # Seed fixe pour les hauteurs de barres (même forme à chaque ouverture)
+        _rng = random.Random(1337)
+        _base_heights = [
+            (math.sin(i / 95 * math.pi) ** 1.4
+             * (0.55 + 0.45 * math.sin(i / 95 * math.pi * 7 + 0.9))
+             * (0.7 + 0.3 * _rng.random()))
+            for i in range(96)
+        ]
+        _anim_t = [0.0]   # liste pour closure mutable
 
-        ctk.CTkLabel(center, text="Studio",
-                     font=ctk.CTkFont("Segoe UI", 32, "bold"),
-                     text_color="#3d3d3d").pack(pady=(0, 6))
+        def _draw_bg(t=0.0):
+            try:
+                if not canvas.winfo_exists():
+                    return
+            except Exception:
+                return
+            canvas.delete("all")
+            w = canvas.winfo_width()
+            h = canvas.winfo_height()
+            if w < 50:
+                return
 
-        # Tagline
-        ctk.CTkLabel(center, text="Vidéos musicales réactives · automatiques · gratuites",
-                     text_color=MUTED, font=ctk.CTkFont("Segoe UI", 11)).pack(pady=(0, 32))
+            cx, cy = w // 2, h // 2
 
-        # Features row
-        feats = ctk.CTkFrame(center, fg_color="transparent")
-        feats.pack(pady=(0, 36))
-        for icon, label in [("🎵", "9 spectres"), ("🎨", "Dégradés"), ("🎵", "Vinyle"), ("📊", "Oscilloscope")]:
-            pill = ctk.CTkFrame(feats, fg_color=SURF2, corner_radius=20,
-                                border_color=BORDER, border_width=1)
-            pill.pack(side="left", padx=5)
-            ctk.CTkLabel(pill, text=f"  {icon}  {label}  ",
-                         text_color=MUTED, font=FONT_MU).pack(padx=2, pady=6)
+            # ── Halo radial animé — pulsation douce ──────────────────────────
+            pulse = 1.0 + 0.06 * math.sin(t * 0.8)
+            for i in range(22, 0, -1):
+                r = i / 22 * pulse
+                rw = int(w * 0.48 * r)
+                rh = int(h * 0.58 * r)
+                # Couleur cycle lent : violet → bleu → violet
+                hue_shift = math.sin(t * 0.25) * 0.15
+                rc = int(max(0, min(255, 30 + (i / 22) * 55 * (1 + hue_shift))))
+                gc = 0
+                bc = int(max(0, min(255, 60 + (i / 22) * 110)))
+                canvas.create_oval(cx - rw, cy - rh, cx + rw, cy + rh,
+                                   fill=f"#{rc:02x}{gc:02x}{bc:02x}", outline="")
 
-        # CTA buttons
-        _btn(center, "  ✦  CRÉER UNE VIDÉO", self.show_step_audio,
-             accent=True, width=300, height=54,
-             font=ctk.CTkFont("Segoe UI", 14, "bold")).pack(pady=6)
-        _btn(center, "  ☰  Historique des créations", self.show_history,
-             width=300, height=44).pack(pady=6)
+            # ── Barres spectre animées en bas ─────────────────────────────────
+            n = 96
+            bar_w = w / n
+            for i in range(n):
+                ti = i / (n - 1)
+                # Hauteur de base + ondulation temporelle par barre
+                phase = t * 1.4 + i * 0.18
+                anim = 0.55 + 0.45 * math.sin(phase)
+                val = _base_heights[i] * anim
+                bar_h = int(val * h * 0.34)
+                if bar_h < 2:
+                    continue
+                x0 = int(i * bar_w)
+                x1 = max(x0 + 1, int((i + 1) * bar_w) - 1)
 
-        # Version badge
-        ctk.CTkLabel(center, text=f"v{VERSION}",
-                     text_color="#2d2d2d", font=FONT_MU).pack(pady=(20, 0))
+                # Couleur : dégradé cyan→violet avec cycle temporel
+                hue = (ti + t * 0.04) % 1.0
+                if hue < 0.5:
+                    rc = int(40 + (1 - hue * 2) * 160)   # rouge décroît
+                    gc = int(hue * 2 * 30)
+                    bc = int(100 + hue * 2 * 155)         # bleu croît
+                else:
+                    rc = int(40 + (hue - 0.5) * 2 * 160)
+                    gc = int((1 - (hue - 0.5) * 2) * 30)
+                    bc = int(255 - (hue - 0.5) * 2 * 100)
+                intensity = int(val * 0.85 + 0.15)
+                rc = int(min(255, rc * intensity))
+                gc = int(min(255, gc * intensity))
+                bc = int(min(255, bc * intensity))
+
+                canvas.create_rectangle(x0, h, x1, h - bar_h,
+                                        fill=f"#{rc:02x}{gc:02x}{bc:02x}",
+                                        outline="")
+
+                # Tip lumineux au sommet des barres
+                if bar_h > 8:
+                    tip_r = min(rc + 80, 255)
+                    tip_g = min(gc + 40, 255)
+                    tip_b = min(bc + 80, 255)
+                    canvas.create_rectangle(x0, h - bar_h, x1, h - bar_h + 2,
+                                            fill=f"#{tip_r:02x}{tip_g:02x}{tip_b:02x}",
+                                            outline="")
+
+            # Ligne de base
+            canvas.create_line(0, h - 1, w, h - 1, fill="#141414", width=1)
+
+        def _anim_loop():
+            try:
+                if not canvas.winfo_exists():
+                    return
+            except Exception:
+                return
+            _anim_t[0] += 0.045
+            _draw_bg(_anim_t[0])
+            self._home_anim_job = self.after(42, _anim_loop)   # ~24 fps
+
+        canvas.bind("<Configure>", lambda e: _draw_bg(_anim_t[0]))
+        self.after(30, _anim_loop)
+
+        # ── Carte centrale ─────────────────────────────────────────────────────
+        card = ctk.CTkFrame(self.main, fg_color="#0f0f0f",
+                            corner_radius=20, border_color="#1e1e1e", border_width=1,
+                            width=420)
+        card.place(relx=0.5, rely=0.46, anchor="center")
+
+        inner = ctk.CTkFrame(card, fg_color="transparent")
+        inner.pack(padx=40, pady=36)
+
+        # Logo PNG (img/tac.png) avec fallback sur icône vectorielle
+        _logo_path = Path(__file__).resolve().parent.parent.parent / "img" / "tac.png"
+        _logo_ok = False
+        if _logo_path.exists():
+            try:
+                _logo_img = Image.open(str(_logo_path)).convert("RGBA")
+                # Rendre le fond noir transparent pour mieux s'intégrer
+                import numpy as _np
+                _arr = _np.array(_logo_img)
+                _black = (_arr[:,:,0] < 18) & (_arr[:,:,1] < 18) & (_arr[:,:,2] < 18)
+                _arr[:,:,3] = _np.where(_black, 0, _arr[:,:,3])
+                _logo_img = Image.fromarray(_arr)
+                _ctk_logo = ctk.CTkImage(
+                    light_image=_logo_img,
+                    dark_image=_logo_img,
+                    size=(130, 130),
+                )
+                ctk.CTkLabel(inner, image=_ctk_logo, text="").pack(pady=(0, 14))
+                _logo_ok = True
+            except Exception:
+                pass
+
+        if not _logo_ok:
+            icon_frame = ctk.CTkFrame(inner, fg_color=ACCENT, corner_radius=14,
+                                      width=54, height=54)
+            icon_frame.pack(pady=(0, 18))
+            icon_frame.pack_propagate(False)
+            ctk.CTkLabel(icon_frame, text="▶",
+                         font=ctk.CTkFont("Segoe UI", 22, "bold"),
+                         text_color="#ffffff").place(relx=0.52, rely=0.5, anchor="center")
+
+        # Titre
+        ctk.CTkLabel(inner, text="TAC MP4 Studio",
+                     font=ctk.CTkFont("Segoe UI", 26, "bold"),
+                     text_color=TEXT).pack()
+        ctk.CTkLabel(inner, text="Music Visualizer",
+                     font=ctk.CTkFont("Segoe UI", 11),
+                     text_color=MUTED).pack(pady=(2, 24))
+
+        # Séparateur
+        ctk.CTkFrame(inner, height=1, fg_color="#1e1e1e", corner_radius=0).pack(
+            fill="x", pady=(0, 24))
+
+        # Bouton principal
+        _btn(inner, "  ✦  NOUVELLE CRÉATION", self.show_step_audio,
+             accent=True, height=48, width=340,
+             font=ctk.CTkFont("Segoe UI", 13, "bold")).pack(pady=(0, 10))
+
+        # Bouton secondaire
+        hist_btn = ctk.CTkButton(inner, text="Historique",
+                                 command=self.show_history,
+                                 fg_color="transparent",
+                                 hover_color="#161616",
+                                 text_color=MUTED,
+                                 border_color="#1e1e1e", border_width=1,
+                                 font=FONT_SM, corner_radius=8,
+                                 height=40, width=340)
+        hist_btn.pack()
+
+        # Features compactes
+        ctk.CTkFrame(inner, height=1, fg_color="#1e1e1e", corner_radius=0).pack(
+            fill="x", pady=(22, 16))
+
+        feat_row = ctk.CTkFrame(inner, fg_color="transparent")
+        feat_row.pack()
+        for text in ["10 spectres", "Vinyle", "Oscilloscope", "Dégradé"]:
+            dot = ctk.CTkLabel(feat_row, text=f"● {text}",
+                               text_color="#333333",
+                               font=ctk.CTkFont("Segoe UI", 9))
+            dot.pack(side="left", padx=7)
+
+        ctk.CTkLabel(inner, text=f"v{VERSION}",
+                     text_color="#252525",
+                     font=ctk.CTkFont("Segoe UI", 8)).pack(pady=(10, 0))
 
     def show_step_audio(self):
         self._clear_main()
