@@ -8,10 +8,13 @@ Pillow>=10.0
 librosa>=0.10
 soundfile>=0.12
 
-# Interface moderne (OBLIGATOIRE pour cette version)
+# Interface moderne
 customtkinter>=5.2
 
+# Drag & drop (Update 1) — optionnel mais recommandé
+# Si absent, le drag & drop est simplement désactivé sans crash
+tkinterdnd2>=0.3.0
+
 # Notes :
-# - FFmpeg doit être installé séparément et dans le PATH :
-#   https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip
+# - FFmpeg doit être dans le PATH : https://www.gyan.dev/ffmpeg/builds/
 # - scipy installé automatiquement via librosa
