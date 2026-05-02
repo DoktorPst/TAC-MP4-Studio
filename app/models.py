@@ -1,4 +1,4 @@
-"""Modèles de données — Update 3 : fond dégradé."""
+"""Modèles de données — Update 4 : disque vinyle."""
 from __future__ import annotations
 from dataclasses import dataclass
 from app.presets import WIDTH, HEIGHT
@@ -14,7 +14,6 @@ class RenderSettings:
     duration_limit: float | None
     start_offset: float
 
-    # Visuels
     particle_preset: str
     smoke_preset: str
     smoke_color: str
@@ -24,19 +23,19 @@ class RenderSettings:
     image_zoom: float
     pulse_strength: float
 
-    # Texte
     text_x: float = 0.50
     text_y: float = 0.70
 
-    # Rendu
     background_blur: int = 38
     output_width: int = WIDTH
     output_height: int = HEIGHT
 
-    # Update 3 — fond dégradé
-    bg_mode: str = "photo"            # "photo" | "gradient"
-    gradient_top: str = "#1a1a2e"     # couleur haut (hex)
-    gradient_bottom: str = "#0f3460"  # couleur bas  (hex)
+    bg_mode: str = "photo"
+    gradient_top: str = "#1a1a2e"
+    gradient_bottom: str = "#0f3460"
+
+    # Update 4 — disque vinyle
+    vinyl_mode: bool = False
 
     @property
     def is_vertical(self) -> bool:

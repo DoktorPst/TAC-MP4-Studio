@@ -158,6 +158,7 @@ def render_video(
     smoke_blobs: list = []
     smoothed = np.zeros(84, dtype=np.float32)
     smooth_kick = 0.0
+    vinyl_angle = 0.0
 
     writer = cv2.VideoWriter(
         temp_video,
@@ -182,7 +183,7 @@ def render_video(
                 "high": float(features["high"][i]),
             }
 
-            frame, particles, smoke_blobs, smoothed = render_frame(
+            frame, particles, smoke_blobs, smoothed, vinyl_angle = render_frame(
                 bg,
                 cover,
                 particles,
@@ -191,6 +192,7 @@ def render_video(
                 metrics,
                 smoothed,
                 settings,
+                vinyl_angle,
             )
 
             writer.write(frame)

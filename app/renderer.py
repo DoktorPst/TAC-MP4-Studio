@@ -1,12 +1,6 @@
 """Rendu frame par frame — OpenCV + PIL.
 
-Nouveautés :
-- 4 nouveaux spectres : Barres néon, Symétrie miroir, Arc plasma, Onde plasma
-- Adaptation automatique au format SHORT vertical (is_vertical)
-  - Pochette repositionnée en haut du cadre
-  - Spectre repositionné dans la zone basse
-  - Texte adapté entre pochette et spectre
-- Cache vignette + police (performance)
+Update 4 : disque vinyle rotatif réactif aux beats.
 """
 from __future__ import annotations
 
@@ -551,10 +545,200 @@ def draw_smoke(frame, smoke_blobs, bass, kick, settings: RenderSettings):
     return smoke_blobs
 
 
+
+# ── Disque vinyle + pochette (Update 4 — refonte) ────────────────────────────
+#
+# Composition : pochette d'album (avant-plan) + vinyle qui sort à droite (arrière-plan)
+# Le vinyle tourne, la pochette est statique et pulse sur les beats.
+#
+# Z-order : ombre → vinyle (tourne) → pochette sleeve (statique)
+
+_vinyl_overlay_cache: dict[int, Image.Image] = {}
+
+
+def _get_vinyl_overlay(radius: int) -> Image.Image:
+    """Overlay sillons vinyle, mis en cache. Ne tourne pas avec le disque."""
+    if radius in _vinyl_overlay_cache:
+        return _vinyl_overlay_cache[radius]
+
+    size = radius * 2
+    overlay = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    d = ImageDraw.Draw(overlay)
+    cx = cy = size // 2
+    outer_r = radius - 1
+    label_r = int(radius * 0.30)   # zone centrale sans grooves
+
+    # Corps vinyle noir
+    d.ellipse((cx - outer_r, cy - outer_r, cx + outer_r, cy + outer_r),
+              fill=(0, 0, 0, 170))
+    # Effacer centre (label)
+    d.ellipse((cx - label_r, cy - label_r, cx + label_r, cy + label_r),
+              fill=(0, 0, 0, 0))
+    # Sillons
+    for i in range(24):
+        r = label_r + (outer_r - label_r) * i // 24
+        d.ellipse((cx - r, cy - r, cx + r, cy + r),
+                  outline=(100, 100, 100, 55), width=1)
+    # Anneau séparateur label/groove
+    d.ellipse((cx - label_r - 3, cy - label_r - 3,
+               cx + label_r + 3, cy + label_r + 3),
+              outline=(160, 160, 160, 100), width=2)
+    # Bord brillant
+    d.ellipse((cx - outer_r, cy - outer_r, cx + outer_r, cy + outer_r),
+              outline=(150, 150, 150, 80), width=3)
+
+    _vinyl_overlay_cache[radius] = overlay
+    return overlay
+
+
+def _composite_image(frame: np.ndarray, img_pil: Image.Image, cx: int, cy: int) -> None:
+    """Colle une image RGBA PIL centrée en (cx, cy) sur la frame BGR numpy."""
+    w_img, h_img = img_pil.size
+    x1, y1 = cx - w_img // 2, cy - h_img // 2
+    x2, y2 = x1 + w_img, y1 + h_img
+
+    height, width = frame.shape[:2]
+    fx1, fy1 = max(0, x1), max(0, y1)
+    fx2, fy2 = min(width, x2), min(height, y2)
+    dx1, dy1 = fx1 - x1, fy1 - y1
+    dx2, dy2 = dx1 + (fx2 - fx1), dy1 + (fy2 - fy1)
+
+    if fx2 <= fx1 or fy2 <= fy1:
+        return
+
+    img_bgr   = cv2.cvtColor(np.array(img_pil.convert("RGB")), cv2.COLOR_RGB2BGR)
+    img_alpha = np.array(img_pil.getchannel("A"), dtype=np.float32) / 255.0
+
+    roi = frame[fy1:fy2, fx1:fx2].astype(np.float32)
+    src = img_bgr[dy1:dy2, dx1:dx2].astype(np.float32)
+    alp = img_alpha[dy1:dy2, dx1:dx2, np.newaxis]
+    frame[fy1:fy2, fx1:fx2] = (roi * (1.0 - alp) + src * alp).astype(np.uint8)
+
+
+def _make_vinyl_disk(cover_pil: Image.Image, radius: int, angle: float) -> Image.Image:
+    """Génère le disque vinyle PIL (RGBA) à l'angle donné."""
+    size = radius * 2
+    # Cover redimensionnée en carré → cercle
+    sq = cover_pil.resize((size, size), Image.LANCZOS)
+    mask = Image.new("L", (size, size), 0)
+    ImageDraw.Draw(mask).ellipse((0, 0, size - 1, size - 1), fill=255)
+    disk = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    disk.paste(sq.convert("RGBA"), mask=mask)
+    # Rotation
+    disk = disk.rotate(-(angle % 360), resample=Image.BILINEAR, expand=False)
+    # Grooves (statiques — appliqués après rotation pour rester fixes)
+    disk = Image.alpha_composite(disk, _get_vinyl_overlay(radius))
+    # Trou central
+    d = ImageDraw.Draw(disk)
+    c = size // 2
+    hr = max(3, int(radius * 0.030))
+    d.ellipse((c - hr, c - hr, c + hr, c + hr), fill=(10, 10, 10, 255))
+    # Reflet crescent statique (ne tourne pas)
+    shine = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    sd = ImageDraw.Draw(shine)
+    off = int(radius * 0.20)
+    ax, ay = int(radius * 0.75), int(radius * 0.60)
+    sd.ellipse((c - ax + off, c - ay + off, c + ax + off, c + ay + off),
+               fill=(255, 255, 255, 22))
+    # Masque circulaire sur le reflet
+    shine_mask = Image.new("L", (size, size), 0)
+    ImageDraw.Draw(shine_mask).ellipse((0, 0, size - 1, size - 1), fill=255)
+    shine.putalpha(Image.fromarray(
+        np.minimum(np.array(shine.getchannel("A")), np.array(shine_mask))
+    ))
+    disk = Image.alpha_composite(disk, shine)
+    return disk
+
+
+def _make_sleeve(cover_pil: Image.Image, side: int) -> Image.Image:
+    """Génère la pochette d'album (RGBA) avec coins arrondis et bordure."""
+    sq = cover_pil.resize((side, side), Image.LANCZOS)
+    radius_corner = max(4, int(side * 0.045))
+
+    result = Image.new("RGBA", (side, side), (0, 0, 0, 0))
+    # Masque coins arrondis
+    mask = Image.new("L", (side, side), 0)
+    md = ImageDraw.Draw(mask)
+    md.rounded_rectangle((0, 0, side - 1, side - 1), radius=radius_corner, fill=255)
+    result.paste(sq.convert("RGBA"), mask=mask)
+
+    # Bordure fine
+    bd = ImageDraw.Draw(result)
+    bd.rounded_rectangle((0, 0, side - 1, side - 1),
+                          radius=radius_corner,
+                          outline=(220, 220, 220, 90), width=2)
+    # Surbrillance bord haut/gauche (effet 3D léger)
+    bd.rounded_rectangle((1, 1, side - 2, side // 3),
+                          radius=radius_corner,
+                          outline=(255, 255, 255, 30), width=1)
+    return result
+
+
+def draw_vinyl_disk(
+    frame: np.ndarray,
+    cover_bgr: np.ndarray,
+    angle: float,
+    bass: float,
+    kick: float,
+    settings: RenderSettings,
+) -> None:
+    """Composition pochette + vinyle.
+
+    Pochette d'album au premier plan (coins arrondis, statique, pulse sur beats).
+    Vinyle qui sort à droite à l'arrière-plan (tourne en continu, réactif).
+    """
+    height, width = frame.shape[:2]
+    is_v = settings.is_vertical
+    scale = width / WIDTH
+
+    # ── Dimensions ────────────────────────────────────────────────────────────
+    # Pochette
+    base_side = int(min(width, height) * 0.38 * settings.image_zoom)
+    pulse_px   = int(base_side * (bass * 0.04 * settings.pulse_strength
+                                  + kick * 0.07 * settings.pulse_strength))
+    sleeve_side = max(40, base_side + pulse_px)
+
+    # Vinyle : légèrement plus grand que la pochette
+    vinyl_r = int(sleeve_side * 0.56)
+
+    # ── Centre de la composition ───────────────────────────────────────────────
+    # Le centre de la pochette est légèrement à gauche du milieu de la frame
+    # pour laisser de la place au vinyle à droite.
+    group_cx = width // 2 - int(sleeve_side * 0.12)
+    group_cy = int(height * 0.27) if is_v else height // 2 - int(height * 0.07)
+
+    # Centre du vinyle : décalé à droite de la pochette
+    vinyl_cx = group_cx + int(sleeve_side * 0.50)
+    vinyl_cy = group_cy + int(sleeve_side * 0.06)   # très légèrement plus bas
+
+    # ── Ombres ────────────────────────────────────────────────────────────────
+    shadow = np.zeros_like(frame)
+    # Ombre vinyle
+    cv2.circle(shadow, (vinyl_cx, vinyl_cy),
+               vinyl_r + int(20 * scale), (35, 35, 35), -1)
+    # Ombre pochette
+    off = int(8 * scale)
+    cv2.rectangle(shadow,
+                  (group_cx - sleeve_side // 2 + off,  group_cy - sleeve_side // 2 + off),
+                  (group_cx + sleeve_side // 2 + off,  group_cy + sleeve_side // 2 + off),
+                  (35, 35, 35), -1)
+    shadow = cv2.GaussianBlur(shadow, (55, 55), 0)
+    cv2.addWeighted(shadow, 0.60, frame, 1.0, 0, frame)
+
+    # ── Vinyle (arrière-plan) ──────────────────────────────────────────────────
+    cover_pil = Image.fromarray(cv2.cvtColor(cover_bgr, cv2.COLOR_BGR2RGB))
+    vinyl_img  = _make_vinyl_disk(cover_pil, vinyl_r, angle)
+    _composite_image(frame, vinyl_img, vinyl_cx, vinyl_cy)
+
+    # ── Pochette (avant-plan) ─────────────────────────────────────────────────
+    sleeve_img = _make_sleeve(cover_pil, sleeve_side)
+    _composite_image(frame, sleeve_img, group_cx, group_cy)
+
+
 # ── Rendu complet d'une frame ─────────────────────────────────────────────────
 
 def render_frame(bg, cover, particles, smoke_blobs, spec_frame, metrics,
-                 smoothed_bands, settings: RenderSettings):
+                 smoothed_bands, settings: RenderSettings, vinyl_angle: float = 0.0):
     frame = bg.copy()
     is_v = settings.is_vertical
 
@@ -572,13 +756,19 @@ def render_frame(bg, cover, particles, smoke_blobs, spec_frame, metrics,
 
     draw_audio_orb(frame, smoothed_bands, bass, kick, settings)
 
-    # Pochette : positionnée selon l'orientation
-    overlay_center(frame, cover, bass, kick, settings.pulse_strength, is_vertical=is_v)
+    # Pochette / Vinyle — selon le mode
+    if settings.vinyl_mode:
+        # Vitesse de rotation : base + réactivité bass + kick
+        new_vinyl_angle = vinyl_angle + 1.8 + bass * 3.5 + kick * 14.0
+        draw_vinyl_disk(frame, cover, vinyl_angle, bass, kick, settings)
+    else:
+        new_vinyl_angle = vinyl_angle
+        overlay_center(frame, cover, bass, kick, settings.pulse_strength, is_vertical=is_v)
 
-    # Texte : adapté pour SHORT (entre pochette et spectre)
+    # Texte
     eff_text_y = settings.text_y
     if is_v:
-        eff_text_y = 0.60  # Zone entre pochette (haut) et spectre (bas)
+        eff_text_y = 0.62
 
     draw_reactive_text(frame, settings.title_text, rms, kick,
                        settings.text_x, eff_text_y,
@@ -588,4 +778,4 @@ def render_frame(bg, cover, particles, smoke_blobs, spec_frame, metrics,
         draw_spectrum(frame, smoothed_bands, rms, bass, mid, high, settings)
 
     draw_vignette(frame)
-    return frame, particles, smoke_blobs, smoothed_bands
+    return frame, particles, smoke_blobs, smoothed_bands, new_vinyl_angle
