@@ -22,11 +22,11 @@
 
 ![TAC MP4 Studio — Interface principale](https://i.imgur.com/WghlJ6F.png)
 
-*Interface moderne CustomTkinter — sombre, propre, tout en une fenêtre*
+*Interface moderne CustomTkinter — dark, propre, tout en une fenêtre*
 
 </div>
 
-TAC MP4 Studio génère automatiquement des **vidéos musicales réactives** à partir d'un fichier audio et d'une image. Le rendu visuel — spectre, fumée, particules, pochette animée — est entièrement synchronisé à la musique via une analyse audio frame par frame.
+TAC MP4 Studio génère automatiquement des **vidéos musicales réactives** à partir d'un fichier audio et d'une image de pochette. Le rendu visuel — spectre, fumée, particules, pochette animée — est entièrement synchronisé à la musique frame par frame.
 
 Conçu pour les producteurs, beatmakers et artistes qui veulent un rendu professionnel sans toucher à After Effects ou Premiere.
 
@@ -36,10 +36,18 @@ Conçu pour les producteurs, beatmakers et artistes qui veulent un rendu profess
 
 <div align="center">
 
-| Format horizontal | Format vertical SHORT |
-|:---:|:---:|
-| ![Rendu horizontal](https://i.imgur.com/Ffxk8Aw.png) | ![Rendu vertical](https://i.imgur.com/tliKqPo.png) |
-| 1920×1080 · YouTube / SoundCloud | 1080×1920 · Instagram Reels / TikTok |
+![Rendu horizontal](https://i.imgur.com/Ffxk8Aw.png)
+
+*Format horizontal 1920×1080 — YouTube · SoundCloud · Bandcamp*
+
+</div>
+
+<div align="center">
+
+<!-- REMPLACER PAR L'IMAGE INTERFACE FOURNIE -->
+![Interface éditeur](https://i.imgur.com/PLACEHOLDER.png)
+
+*Interface éditeur avec preview live et panneau de réglages*
 
 </div>
 
@@ -47,7 +55,7 @@ Conçu pour les producteurs, beatmakers et artistes qui veulent un rendu profess
 
 ![Presets visuels](https://i.imgur.com/moRgO9s.png)
 
-*Presets disponibles : Dark Premium, Neon Club, Reggae Smoke, Chill Lo-Fi, Clean White…*
+*Presets disponibles : Dark Premium, Neon Club, Reggae Smoke, Chill Lo-Fi…*
 
 </div>
 
@@ -55,68 +63,75 @@ Conçu pour les producteurs, beatmakers et artistes qui veulent un rendu profess
 
 ## ⚡ Fonctionnalités
 
-### Analyse audio réactive
+### 🎧 Analyse audio réactive
 - Extraction frame par frame : **RMS, kick, basse, mids, aigus**
-- Synchronisation parfaite entre le son et le visuel
-- Analyse vectorisée via numpy + librosa (~50× plus rapide qu'une boucle Python)
+- Synchronisation parfaite son ↔ visuel
+- Vectorisé numpy + librosa — 50× plus rapide qu'une boucle Python
 
-### Spectres visuels (9 styles)
+### 📊 9 styles de spectre
 | Style | Description |
 |---|---|
 | **Barres premium** | Barres blanches montantes classiques |
 | **Barres néon** | Dégradé rouge→bleu avec halo lumineux |
 | **Cercle radial** | Lignes rayonnantes autour de la pochette |
-| **Cercle + barres** | Combinaison orbe + spectre bas |
-| **Symétrie miroir** | Barres symétriques haut/bas — idéal SHORT |
-| **Arc plasma** | Demi-cercle coloré avec glow bas de cadre |
+| **Cercle + barres** | Orbe + spectre bas combinés |
+| **Symétrie miroir** | Barres symétriques haut/bas — idéal SHORT vertical |
+| **Arc plasma** | Demi-cercle coloré avec glow |
 | **Onde plasma** | Waveform épaisse + halo + reflet |
-| **Waveform miroir** | Forme d'onde symétrique |
+| **Waveform miroir** | Forme d'onde symétrique simple |
 | **Ligne fine** | Ligne monochrome minimaliste |
 
-### Effets visuels
+### 🌫 Effets visuels
 - **Fumée** : blobs animés avec turbulence organique (Légère / Cinématique / Dense)
-- **Particules** : flottantes réactives aux kicks et aigus
-- **Pochette** : pulse sur les beats, halo glow, bordure arrondie
-- **Vignette** : cache vignette précalculé par résolution
-- **Texte** : ombre multi-couches, réactif aux kicks
+- **Particules** : réactives aux kicks et aux aigus
+- **Pochette** : pulse sur les beats, halo glow, bordure arrondie, adaptation automatique au format vertical
+- **Vignette** : masque précalculé par résolution (zéro overhead)
+- **Texte** : ombre multi-couches réactive, position X/Y réglable
 
-### 3 modes d'export
+### 🚀 3 modes d'export
+
 ```
-CHECK   →  15 secondes   ·  1920×1080 horizontal  ·  Aperçu rapide
-SHORT   →  1 minute      ·  1080×1920 vertical    ·  Milieu du son  (Reels / TikTok)
-COMPLET →  Son entier    ·  1920×1080 horizontal  ·  YouTube / SoundCloud
+CHECK   →  15 secondes  ·  1920×1080 horizontal  ·  Aperçu rapide
+SHORT   →  1 minute     ·  1080×1920 vertical    ·  Milieu du son  (Reels / TikTok)
+COMPLET →  Son entier   ·  1920×1080 horizontal  ·  YouTube / SoundCloud
 ```
 
-### Gestion de projets
-- Dossier projet auto-créé avec musique et pochette copiées
-- Historique persistant dans `%APPDATA%\DoktorP3st\TAC_MP4\`
-- Config sauvegardée (presets, réglages sliders, géométrie fenêtre)
-- Écriture config atomique (pas de corruption)
+> Le mode **SHORT** prend automatiquement le milieu de ta musique — pas le début.
 
 ---
 
-## 🖥️ Interface
+## 🆕 Update 1
 
 <div align="center">
 
 ![Panneau de réglages](https://i.imgur.com/9UAfDY2.png)
 
-*Panneau droit : presets 1-clic, sliders, 9 styles de spectre, export*
-
 </div>
 
-L'interface est construite avec **CustomTkinter** — rendu natif sombre, sans dépendance Qt ni Electron.
+### 🔄 Switch preview 16:9 ↔ 9:16
+Un bouton toggle dans les contrôles de preview te permet de basculer instantanément entre le rendu horizontal et vertical **sans relancer l'export**. La preview se recharge avec le bon format, la pochette et le spectre se repositionnent automatiquement.
 
-- Preview vidéo live dans la fenêtre principale
-- Lecture audio preview synchronisée (via ffplay)
-- Sliders avec debounce 600ms (pas d'écriture disque à chaque tick)
-- Contrôles désactivés pendant l'export, overlay de progression
+### ⚠️ Vérification FFmpeg au démarrage
+Si `ffmpeg` ou `ffplay` est absent ou pas dans le PATH, une bannière orange apparaît au bas de la fenêtre dès le démarrage — avec le message d'erreur et le lien pour installer. L'app reste entièrement utilisable.
+
+### ✅ Validation nom projet
+Le champ nom de projet est maintenant **obligatoire avant de générer**. Si vide au moment de cliquer GÉNÉRER, un message d'erreur rouge apparaît directement sous le champ et l'export est bloqué. Plus de popup surprise en plein workflow.
+
+### 📂 Drag & Drop
+Glisse directement tes fichiers sur la fenêtre depuis l'Explorateur Windows :
+- **Audio** glissé → navigation automatique vers le choix de pochette
+- **Image** glissée (audio déjà chargé) → éditeur direct
+- **Audio + Image** simultanément → éditeur direct
+- Fichier non reconnu → message d'erreur propre, aucun crash
+- Fonctionne avec les chemins contenant des espaces
+
+> Nécessite `tkinterdnd2` (`pip install tkinterdnd2`). Si absent, le drag & drop est silencieusement désactivé — l'app tourne normalement.
 
 ---
 
 ## 📦 Installation
 
-### Prérequis
+### 1. Prérequis
 
 **Python 3.11+**
 ```
@@ -127,44 +142,49 @@ https://www.python.org/downloads/
 ```
 https://www.gyan.dev/ffmpeg/builds/
 ```
-> Télécharger `ffmpeg-release-essentials.zip` → extraire dans `C:\ffmpeg\` → ajouter `C:\ffmpeg\bin` au PATH Windows
 
-### Installation du projet
+> Télécharger `ffmpeg-release-essentials.zip` → extraire dans `C:\ffmpeg\` → ajouter `C:\ffmpeg\bin` au PATH Windows :
+> Démarrer → "Variables d'environnement" → `Path` → Modifier → Nouveau → `C:\ffmpeg\bin`
+
+### 2. Installer le projet
 
 ```bash
-# 1. Cloner le dépôt
+# Cloner
 git clone https://github.com/DoktorP3st/tac-mp4-studio.git
 cd tac-mp4-studio
 
-# 2. Installer les dépendances
+# Installer les dépendances
 pip install -r requirements.txt
 
-# 3. Lancer
+# Lancer
 python main.py
 ```
 
-### Dépendances Python
+### 3. Dépendances Python
 
-```
-numpy>=1.24
-opencv-python>=4.8
-Pillow>=10.0
-librosa>=0.10
-soundfile>=0.12
-customtkinter>=5.2
-```
+| Package | Rôle |
+|---|---|
+| `numpy` | Calculs matriciels audio + vidéo |
+| `opencv-python` | Rendu frame OpenCV |
+| `Pillow` | Texte, fonts, compositing |
+| `librosa` | Analyse audio (beat, spectre, bandes) |
+| `soundfile` | Lecture durée audio |
+| `customtkinter` | Interface moderne dark |
+| `tkinterdnd2` | Drag & drop *(optionnel)* |
 
 ---
 
-## 🚀 Utilisation rapide
+## 🖥️ Utilisation
 
 ```
 1. Lancer python main.py
-2. Cliquer CRÉER → importer un fichier audio (MP3, WAV, FLAC, OGG, M4A)
-3. Importer une pochette (JPG, PNG, WEBP)
+2. Cliquer CRÉER (ou glisser un fichier audio sur la fenêtre)
+3. Choisir la pochette (ou la glisser directement)
 4. Choisir un preset visuel dans le panneau droit
-5. Ajuster les sliders si besoin (preview live)
-6. Onglet Export → nommer le projet → choisir CHECK / SHORT / COMPLET → GÉNÉRER
+5. Ajuster les sliders — la preview se met à jour en live
+6. Basculer entre 16:9 et 9:16 pour voir le rendu SHORT
+7. Renseigner le nom du projet
+8. Choisir CHECK / SHORT / COMPLET → GÉNÉRER
 ```
 
 ---
@@ -173,20 +193,30 @@ customtkinter>=5.2
 
 ```
 tac_mp4_studio/
-├── main.py              ← entry point (5 lignes)
+├── main.py              ← entry point
 ├── app/
 │   ├── config.py        ← persistance AppData
 │   ├── presets.py       ← constantes & presets visuels
 │   ├── models.py        ← RenderSettings dataclass
-│   ├── audio.py         ← analyse librosa (vectorisé)
+│   ├── audio.py         ← analyse librosa vectorisée
 │   ├── particles.py     ← FloatingParticle, SmokeBlob
-│   ├── renderer.py      ← rendu frame OpenCV + PIL (9 spectres)
-│   ├── exporter.py      ← pipeline vidéo FFmpeg
+│   ├── renderer.py      ← rendu frame (9 spectres, adaptation vertical)
+│   ├── exporter.py      ← pipeline FFmpeg (bug SHORT offset corrigé)
 │   └── ui/
-│       ├── app.py       ← fenêtre CustomTkinter
+│       ├── app.py       ← fenêtre CustomTkinter (Update 1)
 │       └── widgets.py   ← ScrollFrame
 └── requirements.txt
 ```
+
+---
+
+## 🗺️ Roadmap
+
+| Update | Status | Contenu |
+|---|---|---|
+| **Update 1** | ✅ Disponible | Switch preview 16:9↔9:16 · Vérif FFmpeg · Nom projet obligatoire · Drag & Drop |
+| **Update 2** | 🔜 En cours | Waveform globale · Champs Artiste + Titre séparés · Raccourcis clavier |
+| **Update 3** | 📋 Planifié | Fond dégradé · Miniatures historique · Mode plein écran preview |
 
 ---
 
@@ -201,7 +231,7 @@ pyinstaller --onefile --noconsole \
   main.py
 ```
 
-L'exécutable est dans `dist/TAC_MP4_Studio.exe`.  
+L'exécutable est dans `dist/TAC_MP4_Studio.exe`.
 Distribuer avec FFmpeg ou demander à l'utilisateur de l'installer séparément.
 
 ---
