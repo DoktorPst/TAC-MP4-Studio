@@ -783,6 +783,9 @@ def _make_vinyl_disk(cover_pil: Image.Image, radius: int, angle: float,
 
     # ── Superposer vinyle.png (sillons opaques, trou transparent) ─────────────
     if vinyl_base is not None:
+        # Redimensionner si le pulse a changé la taille du disk vs le cache
+        if vinyl_base.size != disk.size:
+            vinyl_base = vinyl_base.resize(disk.size, Image.LANCZOS)
         disk = Image.alpha_composite(disk, vinyl_base)
 
     # ── Rotation globale (fond + vinyle ensemble) ─────────────────────────────
