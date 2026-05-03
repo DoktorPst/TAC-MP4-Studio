@@ -83,10 +83,11 @@ def _add_audio_to_video(
         "-map", "1:v:0",
         "-map", "0:a:0",
         "-pix_fmt", "yuv420p",
-        "-c:a", "aac",
+        "-c:a", "aac",      # AAC 320k — qualité max compatible MP4/YouTube/TikTok
         "-b:a", "320k",
         "-ar", "44100",
         "-ac", "2",
+        "-af", "aresample=resampler=soxr",  # resampler haute qualité
         "-movflags", "+faststart",
         "-shortest",
     ]
