@@ -46,7 +46,7 @@ ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
 
 # ── Version ───────────────────────────────────────────────────────────────────
-VERSION = "1.5.1"   # Update 5 — fix pochette glitch · home redesign · export UI
+VERSION = "1.7.0"   # Update 7 — spectre 3 couleurs · flash beats · preset Reggae amélioré
 
 BG      = "#0a0a0a"
 SURF    = "#111111"
@@ -158,6 +158,7 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
         settings = self.config_data.get("settings", {})
         self.geometry(settings.get("window_geometry", "1300x820+60+30"))
         self.minsize(1180, 760)
+        self.after(10, lambda: self.state("zoomed"))  # plein écran au démarrage
 
         # ── State ─────────────────────────────────────────────────────────────
         self.audio_path   = ""
@@ -201,9 +202,15 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
         self.user_presets: dict = self.config_data.get("user_presets", {})
 
         # Update 5 — couleur spectre + fond flottant
-        self.spectrum_color     = settings.get("spectrum_color", "#ffffff")
+        self.spectrum_color      = settings.get("spectrum_color", "#ffffff")
         self.spectrum_color_auto = tk.BooleanVar(value=bool(settings.get("spectrum_color_auto", False)))
-        self.floating_bg        = tk.BooleanVar(value=bool(settings.get("floating_bg", False)))
+        self.floating_bg         = tk.BooleanVar(value=bool(settings.get("floating_bg", False)))
+
+        # Update 7 — spectre 3 couleurs + réactivité
+        self.spectrum_color_mid  = settings.get("spectrum_color_mid",  "#ffffff")
+        self.spectrum_color_high = settings.get("spectrum_color_high", "#ffffff")
+        self.spectrum_tricolor   = tk.BooleanVar(value=bool(settings.get("spectrum_tricolor", False)))
+        self.spectrum_reactive   = tk.BooleanVar(value=bool(settings.get("spectrum_reactive", False)))
 
         # ── Preview state ──────────────────────────────────────────────────────
         self.preview_is_vertical  = False
@@ -778,6 +785,8 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
         top.pack(fill="x", pady=(0, 16))
         ctk.CTkLabel(top, text="Historique", font=FONT_H1, text_color=TEXT).pack(side="left")
         _btn(top, "← Accueil", self.show_home, small=True, width=120).pack(side="right")
+        _btn(top, "🗑  Vider l'historique", self._clear_all_history,
+             small=True, width=160, danger=True).pack(side="right", padx=(0, 8))
 
         items = self._sorted_history()
         if not items:
@@ -856,6 +865,20 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
     def _sorted_history(self):
         return sorted(self.history, key=lambda x: x.get("created_at", ""), reverse=True)
 
+    def _clear_all_history(self):
+        """Supprime toutes les entrées de l'historique (fichiers conservés)."""
+        if not self.history:
+            return
+        n = len(self.history)
+        if messagebox.askyesno(
+            "Vider l historique",
+            f"Supprimer les {n} entrees ? Les fichiers restent sur le disque.",
+            icon="warning"
+        ):
+            self.history.clear()
+            self._persist_now()
+            self.show_history()
+
     def _delete_history_item(self, item):
         if messagebox.askyesno("Historique",
                                f"Supprimer '{item.get('name')}' de l'historique ?\n(Fichiers conservés.)"):
@@ -910,6 +933,9 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
              width=42, height=34, small=True).pack(side="left", padx=(0, 6))
         _btn(ctrl, "⟲ Recharger", self._prepare_preview,
              width=110, height=34, small=True).pack(side="left", padx=(0, 6))
+        _btn(ctrl, "📷 Rendu HD", self._capture_hd_frame,
+             width=110, height=34, small=True,
+             fg_color="#1a1a2e", hover_color="#2a2a4e").pack(side="left", padx=(0, 12))
         _btn(ctrl, "⛶ Plein écran", self._open_fullscreen,
              width=120, height=34, small=True).pack(side="left", padx=(0, 12))
         self._fmt_btn = _btn(ctrl,
@@ -1091,7 +1117,7 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
         self._slider_row(ts, "Taille",     self.spectrum_size, 0.55, 1.65)
         self._slider_row(ts, "Position Y", self.spectrum_y,   0.62, 0.95)
         _sep(ts)
-        ctk.CTkLabel(ts, text="Couleur", text_color=MUTED, font=FONT_MU, anchor="w").pack(anchor="w", pady=(8, 2))
+        ctk.CTkLabel(ts, text="Couleur principale", text_color=MUTED, font=FONT_MU, anchor="w").pack(anchor="w", pady=(8, 2))
         cr = ctk.CTkFrame(ts, fg_color="transparent")
         cr.pack(fill="x", pady=(0, 4))
         self._spec_swatch = tk.Label(cr, bg=self.spectrum_color, width=5, relief="flat",
@@ -1109,6 +1135,56 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
                       command=self._on_spectrum_color_auto,
                       progress_color=ACCENT, button_color=ACCLT,
                       button_hover_color=ACCENT, width=44, height=22).pack(side="right")
+
+        # ── Update 7 — Spectre 3 couleurs ─────────────────────────────────────
+        _sep(ts)
+        tri_hdr = ctk.CTkFrame(ts, fg_color="transparent")
+        tri_hdr.pack(fill="x", pady=(8, 2))
+        ctk.CTkLabel(tri_hdr, text="🎨  Mode 3 couleurs", text_color=TEXT,
+                     font=FONT_H2, anchor="w").pack(side="left")
+        ctk.CTkSwitch(tri_hdr, text="", variable=self.spectrum_tricolor,
+                      command=self._on_setting_changed,
+                      progress_color=ACCENT, button_color=ACCLT,
+                      button_hover_color=ACCENT, width=44, height=22).pack(side="right")
+        ctk.CTkLabel(ts, text="Grave → Médiums → Aigus, chaque bande a sa couleur",
+                     text_color=MUTED, font=FONT_MU, anchor="w").pack(anchor="w", pady=(0, 6))
+
+        # Color pickers mid + high
+        for attr, label, swatch_attr, hex_attr, pick_fn, reset_fn in [
+            ("spectrum_color_mid",  "Médiums (centre)",
+             "_spec_swatch_mid",  "_spec_hex_mid",
+             lambda: self._pick_spectrum_color_band("mid"),
+             lambda: self._set_spectrum_color_band("mid", "#ffffff")),
+            ("spectrum_color_high", "Aigus (droite)",
+             "_spec_swatch_high", "_spec_hex_high",
+             lambda: self._pick_spectrum_color_band("high"),
+             lambda: self._set_spectrum_color_band("high", "#ffffff")),
+        ]:
+            ctk.CTkLabel(ts, text=label, text_color=MUTED, font=FONT_MU, anchor="w").pack(anchor="w", pady=(2, 0))
+            row = ctk.CTkFrame(ts, fg_color="transparent")
+            row.pack(fill="x", pady=(0, 4))
+            color_val = getattr(self, attr)
+            sw = tk.Label(row, bg=color_val, width=5, relief="flat",
+                          bd=1, highlightbackground=BORDER, highlightthickness=1)
+            sw.pack(side="left", padx=(0, 6))
+            hl = ctk.CTkLabel(row, text=color_val, text_color=TEXT, font=FONT_MU, width=65, anchor="w")
+            hl.pack(side="left")
+            setattr(self, swatch_attr, sw)
+            setattr(self, hex_attr, hl)
+            _btn(row, "Choisir", pick_fn, small=True, width=70, height=26).pack(side="left", padx=(6, 0))
+            _btn(row, "⬜", reset_fn, small=True, width=36, height=26).pack(side="left", padx=(4, 0))
+
+        # Mode réactif
+        react_row = ctk.CTkFrame(ts, fg_color="transparent")
+        react_row.pack(fill="x", pady=(6, 0))
+        ctk.CTkLabel(react_row, text="⚡  Flash sur les beats", text_color=TEXT,
+                     font=FONT_H2, anchor="w").pack(side="left")
+        ctk.CTkSwitch(react_row, text="", variable=self.spectrum_reactive,
+                      command=self._on_setting_changed,
+                      progress_color=ACCENT, button_color=ACCLT,
+                      button_hover_color=ACCENT, width=44, height=22).pack(side="right")
+        ctk.CTkLabel(ts, text="Le spectre flashe blanc sur chaque kick",
+                     text_color=MUTED, font=FONT_MU, anchor="w").pack(anchor="w", pady=(0, 4))
 
         # ── 🚀 Export ──────────────────────────────────────────────────────────
         te = mkscroll("🚀")
@@ -1235,9 +1311,33 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
     # ── Couleur spectre (Update 5) ───────────────────────────────────────────
 
     def _pick_spectrum_color(self):
-        result = colorchooser.askcolor(color=self.spectrum_color, title="Couleur du spectre")
+        result = colorchooser.askcolor(color=self.spectrum_color, title="Couleur du spectre — Basses")
         if result and result[1]:
             self._set_spectrum_color(result[1])
+
+    def _pick_spectrum_color_band(self, band: str):
+        """Ouvre le color picker pour la bande mid ou high."""
+        attr = f"spectrum_color_{band}"
+        current = getattr(self, attr, "#ffffff")
+        label = "Médiums" if band == "mid" else "Aigus"
+        result = colorchooser.askcolor(color=current, title=f"Couleur spectre — {label}")
+        if result and result[1]:
+            self._set_spectrum_color_band(band, result[1])
+
+    def _set_spectrum_color_band(self, band: str, hex_color: str):
+        """Met à jour la couleur d'une bande (mid ou high)."""
+        setattr(self, f"spectrum_color_{band}", hex_color)
+        swatch_attr = f"_spec_swatch_{band}"
+        hex_attr    = f"_spec_hex_{band}"
+        if hasattr(self, swatch_attr):
+            try: getattr(self, swatch_attr).configure(bg=hex_color)
+            except Exception: pass
+        if hasattr(self, hex_attr):
+            try: getattr(self, hex_attr).configure(text=hex_color)
+            except Exception: pass
+        self._schedule_persist()
+        if self.preview_ready:
+            self._reload_visuals_only()
 
     def _set_spectrum_color(self, hex_color: str):
         self.spectrum_color = hex_color
@@ -1347,6 +1447,10 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
         if "gradient_top" in p:     self.gradient_top = p["gradient_top"]
         if "gradient_bottom" in p:  self.gradient_bottom = p["gradient_bottom"]
         self._update_gradient_ui()
+        if "spectrum_color_mid"  in p: self._set_spectrum_color_band("mid",  p["spectrum_color_mid"])
+        if "spectrum_color_high" in p: self._set_spectrum_color_band("high", p["spectrum_color_high"])
+        if "spectrum_tricolor"   in p: self.spectrum_tricolor.set(p["spectrum_tricolor"])
+        if "spectrum_reactive"   in p: self.spectrum_reactive.set(p["spectrum_reactive"])
         self._schedule_persist()
         if not self.is_rendering:
             self._reload_visuals_only()
@@ -1454,6 +1558,107 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
             preview = "Aucun texte affiché"
         if hasattr(self, "_text_preview_lbl"):
             self._text_preview_lbl.configure(text=f"→ {preview}")
+
+    def _capture_hd_frame(self):
+        """Rend une frame unique en résolution réelle (1920×1080 ou 1080×1920)
+        et l'affiche dans une fenêtre dédiée — aperçu exact du rendu final."""
+        if not self.audio_path or not self.image_path:
+            messagebox.showinfo("Rendu HD", "Charge une musique et une pochette d'abord.")
+            return
+        if not self.preview_features:
+            messagebox.showinfo("Rendu HD", "Lance d'abord la preview (⟲ Recharger).")
+            return
+
+        self._set_status("Rendu HD en cours...", WARN)
+        self.update_idletasks()
+
+        is_short = (self.export_mode.get() == "SHORT")
+        out_w = 1080 if is_short else 1920
+        out_h = 1920 if is_short else 1080
+
+        s = self._current_settings(preview=False, short_mode=is_short)
+        s.output_path = ""
+
+        def worker():
+            try:
+                bg, cover = load_cover_image(
+                    s.image_path, s.background_blur, s.image_zoom,
+                    out_w, out_h,
+                    bg_mode=s.bg_mode,
+                    gradient_top=s.gradient_top,
+                    gradient_bottom=s.gradient_bottom,
+                )
+                # Utilise le frame courant de la preview
+                i = self.preview_index % len(self.preview_features["rms"])
+                metrics = {k: float(self.preview_features[k][i])
+                           for k in ("rms", "kick", "bass", "mid", "high")}
+                raw_f = self.preview_features["raw"][i] if "raw" in self.preview_features else None
+
+                frame, _, _, _, _ = render_frame(
+                    bg, cover, [], [],
+                    self.preview_features["spec"][:, i],
+                    metrics, np.zeros(84, dtype=np.float32),
+                    s, vinyl_angle=self.vinyl_angle,
+                    frame_idx=i, raw_frame=raw_f,
+                )
+
+                rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                img = Image.fromarray(rgb)
+                self.after(0, lambda: self._show_hd_window(img, out_w, out_h))
+                self.after(0, lambda: self._set_status("Rendu HD prêt", SUCCESS))
+            except Exception as exc:
+                msg = str(exc)
+                self.after(0, lambda: messagebox.showerror("Rendu HD", msg))
+                self.after(0, lambda: self._set_status("Erreur rendu HD", DANGER))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _show_hd_window(self, img: Image.Image, out_w: int, out_h: int):
+        """Affiche l'image HD dans une fenêtre flottante avec zoom adaptatif."""
+        win = ctk.CTkToplevel(self)
+        win.title(f"Rendu HD — {out_w}×{out_h}  (fermer pour continuer)")
+        win.configure(fg_color="#050505")
+        win.attributes("-topmost", True)
+
+        # Taille max = 85% de l'écran
+        sw = int(self.winfo_screenwidth()  * 0.85)
+        sh = int(self.winfo_screenheight() * 0.85)
+        ratio = min(sw / out_w, sh / out_h)
+        disp_w = int(out_w * ratio)
+        disp_h = int(out_h * ratio)
+
+        win.geometry(f"{disp_w}x{disp_h + 60}")
+
+        # Image redimensionnée pour l'affichage
+        disp_img = img.resize((disp_w, disp_h), Image.LANCZOS)
+        ctk_img = ctk.CTkImage(light_image=disp_img, dark_image=disp_img,
+                               size=(disp_w, disp_h))
+        ctk.CTkLabel(win, image=ctk_img, text="").pack()
+
+        # Barre basse : résolution + bouton sauvegarder
+        bar = ctk.CTkFrame(win, fg_color="#0d0d0d", height=60)
+        bar.pack(fill="x")
+        bar.pack_propagate(False)
+
+        ctk.CTkLabel(bar, text=f"Aperçu exact · {out_w}×{out_h}",
+                     text_color=MUTED, font=FONT_MU).pack(side="left", padx=16, pady=18)
+
+        def save_png():
+            from tkinter import filedialog as _fd
+            path = _fd.asksaveasfilename(
+                defaultextension=".png",
+                filetypes=[("PNG", "*.png")],
+                title="Enregistrer le rendu HD",
+                initialfile=f"render_hd_{out_w}x{out_h}.png",
+            )
+            if path:
+                img.save(path)
+                self._set_status(f"Sauvegardé : {Path(path).name}", SUCCESS)
+
+        _btn(bar, "💾  Sauvegarder PNG", save_png,
+             accent=True, small=True, height=32, width=160).pack(side="right", padx=16, pady=14)
+        _btn(bar, "✕  Fermer", win.destroy,
+             small=True, height=32, width=90).pack(side="right", padx=(0, 8), pady=14)
 
     def _toggle_preview_format(self):
         self.preview_is_vertical = not self.preview_is_vertical
@@ -1569,9 +1774,13 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
             "gradient_bottom":  self.gradient_bottom,
             "vinyl_mode":       bool(self.vinyl_mode.get()),
             "vinyl_black":      bool(self.vinyl_black.get()),
-            "spectrum_color":     self.spectrum_color,
-            "spectrum_color_auto": bool(self.spectrum_color_auto.get()),
-            "floating_bg":        bool(self.floating_bg.get()),
+            "spectrum_color":       self.spectrum_color,
+            "spectrum_color_auto":  bool(self.spectrum_color_auto.get()),
+            "floating_bg":          bool(self.floating_bg.get()),
+            "spectrum_color_mid":   self.spectrum_color_mid,
+            "spectrum_color_high":  self.spectrum_color_high,
+            "spectrum_tricolor":    bool(self.spectrum_tricolor.get()),
+            "spectrum_reactive":    bool(self.spectrum_reactive.get()),
         }
         self.config_data["user_presets"] = self.user_presets
         save_config(self.config_data)
@@ -1704,6 +1913,10 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
             spectrum_color=self.spectrum_color,
             spectrum_color_auto=bool(self.spectrum_color_auto.get()),
             floating_bg=bool(self.floating_bg.get()),
+            spectrum_color_mid=self.spectrum_color_mid,
+            spectrum_color_high=self.spectrum_color_high,
+            spectrum_tricolor=bool(self.spectrum_tricolor.get()),
+            spectrum_reactive=bool(self.spectrum_reactive.get()),
         )
 
     # ══════════════════════════════════════════════════════════════════════════
