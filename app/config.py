@@ -28,6 +28,7 @@ def default_config() -> dict:
     return {
         "project_root": str(DEFAULT_CREATIONS_DIR),
         "history": [],
+        "user_presets": {},
         "settings": {
             "global_preset": "Dark Premium",
             "particle_preset": "Premium",

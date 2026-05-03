@@ -334,25 +334,6 @@ def spectrum_bands(spec_frame, bar_count=84):
 
 # ── Spectres ──────────────────────────────────────────────────────────────────
 
-def _spectrum_geometry(settings: RenderSettings, height: int, width: int):
-    """Calcule base_y, max_w, gap, bar_count, bar_w, total_w, start_x selon format."""
-    is_v = settings.is_vertical
-
-    # En mode SHORT, repositionner le spectre dans la zone basse
-    eff_y = settings.spectrum_y
-    if is_v:
-        eff_y = max(eff_y, 0.72)  # Jamais plus haut que 72% en vertical
-
-    base_y = int(height * eff_y)
-    max_w = int(width * (0.86 if is_v else 0.74))
-    gap = max(2, int(7 * width / WIDTH))
-    bar_count = len(settings._bands_cache) if hasattr(settings, "_bands_cache") else 84
-    bar_w = max(2, int((max_w - gap * (bar_count - 1)) / bar_count))
-    total_w = bar_count * bar_w + (bar_count - 1) * gap
-    start_x = width // 2 - total_w // 2
-    return base_y, max_w, gap, bar_count, bar_w, total_w, start_x
-
-
 def draw_spectrum(frame, bands, rms, bass, mid, high, settings: RenderSettings,
                   raw_frame=None, kick: float = 0.0):
     """Rendu du spectre. Supporte la couleur personnalisée + 3 couleurs (Update 7)."""
@@ -709,54 +690,13 @@ def draw_smoke(frame, smoke_blobs, bass, kick, settings: RenderSettings):
 
 
 
-# ── Disque vinyle + pochette (Update 4 — refonte) ────────────────────────────
-#
-# Composition : pochette d'album (avant-plan) + vinyle qui sort à droite (arrière-plan)
-# Le vinyle tourne, la pochette est statique et pulse sur les beats.
-#
+# ── Disque vinyle + pochette ─────────────────────────────────────────────────
 # Z-order : ombre → vinyle (tourne) → pochette sleeve (statique)
-
-_vinyl_overlay_cache: dict[int, Image.Image] = {}
 _vinyl_img_cache: dict[int, Image.Image] = {}    # vinyle.png redimensionné par rayon
 # Chemins des assets (relatifs à ce fichier)
 import os as _os
 _ASSETS_DIR = _os.path.join(_os.path.dirname(_os.path.dirname(__file__)), "img")
 _VINYL_PNG   = _os.path.join(_ASSETS_DIR, "vinyle.png")
-
-
-def _get_vinyl_overlay(radius: int) -> Image.Image:
-    """Overlay sillons vinyle, mis en cache. Ne tourne pas avec le disque."""
-    if radius in _vinyl_overlay_cache:
-        return _vinyl_overlay_cache[radius]
-
-    size = radius * 2
-    overlay = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    d = ImageDraw.Draw(overlay)
-    cx = cy = size // 2
-    outer_r = radius - 1
-    label_r = int(radius * 0.30)   # zone centrale sans grooves
-
-    # Corps vinyle noir
-    d.ellipse((cx - outer_r, cy - outer_r, cx + outer_r, cy + outer_r),
-              fill=(0, 0, 0, 170))
-    # Effacer centre (label)
-    d.ellipse((cx - label_r, cy - label_r, cx + label_r, cy + label_r),
-              fill=(0, 0, 0, 0))
-    # Sillons
-    for i in range(24):
-        r = label_r + (outer_r - label_r) * i // 24
-        d.ellipse((cx - r, cy - r, cx + r, cy + r),
-                  outline=(100, 100, 100, 55), width=1)
-    # Anneau séparateur label/groove
-    d.ellipse((cx - label_r - 3, cy - label_r - 3,
-               cx + label_r + 3, cy + label_r + 3),
-              outline=(160, 160, 160, 100), width=2)
-    # Bord brillant
-    d.ellipse((cx - outer_r, cy - outer_r, cx + outer_r, cy + outer_r),
-              outline=(150, 150, 150, 80), width=3)
-
-    _vinyl_overlay_cache[radius] = overlay
-    return overlay
 
 
 def _composite_image(frame: np.ndarray, img_pil: Image.Image, cx: int, cy: int) -> None:
@@ -800,7 +740,7 @@ def _load_vinyl_png(radius: int) -> Image.Image | None:
 
 
 def _make_vinyl_disk(cover_pil: Image.Image, radius: int, angle: float,
-                     vinyl_black: bool = False) -> Image.Image:
+                     vinyl_black: bool = False, cache_r: int = 0) -> Image.Image:
     """Génère le disque vinyle PIL (RGBA).
 
     Utilise vinyle.png comme corps du disque (avec sillons réels).
@@ -811,7 +751,7 @@ def _make_vinyl_disk(cover_pil: Image.Image, radius: int, angle: float,
     disk = Image.new("RGBA", (size, size), (0, 0, 0, 0))
 
     # ── Corps vinyle : vinyle.png réel ────────────────────────────────────────
-    vinyl_base = _load_vinyl_png(radius)
+    vinyl_base = _load_vinyl_png(cache_r if cache_r > 0 else radius)
     # ── Fond du disque : noir ou pochette selon le mode ──────────────────────
     # Le trou du vinyle.png représente 25.8% du rayon total
     # L'image doit remplir EXACTEMENT cette zone pour ne pas dépasser
@@ -896,8 +836,10 @@ def draw_vinyl_disk(
                                   + kick * 0.07 * settings.pulse_strength))
     sleeve_side = max(40, base_side + pulse_px)
 
-    # Vinyle : plus petit que la version précédente, sort seulement à droite
-    vinyl_r = int(sleeve_side * 0.52)
+    # Vinyle : rayon basé sur base_side (sans pulse) pour la stabilité du cache
+    base_vinyl_r = int(min(width, height) * 0.38 * settings.image_zoom * 0.52)
+    pulse_vinyl  = int(base_vinyl_r * (bass * 0.04 + kick * 0.07) * settings.pulse_strength)
+    vinyl_r = max(40, base_vinyl_r + pulse_vinyl)
 
     # ── Centre de la composition ───────────────────────────────────────────────
     group_cx = width // 2 - int(sleeve_side * 0.22)
@@ -930,7 +872,8 @@ def draw_vinyl_disk(
     cover_pil = Image.fromarray(cv2.cvtColor(cover_bgr, cv2.COLOR_BGR2RGB))
     use_image_on_disk = not settings.vinyl_black
     vinyl_img  = _make_vinyl_disk(cover_pil, vinyl_r, angle,
-                                  vinyl_black=not use_image_on_disk)
+                                  vinyl_black=not use_image_on_disk,
+                                  cache_r=base_vinyl_r)
     _composite_image(frame, vinyl_img, vinyl_cx, vinyl_cy)
 
     # ── Pochette (avant-plan) ─────────────────────────────────────────────────
