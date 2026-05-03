@@ -9,6 +9,9 @@ from __future__ import annotations
 
 import re
 import shutil
+import colorsys
+import math
+import random
 import threading
 import time
 from pathlib import Path
@@ -46,7 +49,7 @@ ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
 
 # ── Version ───────────────────────────────────────────────────────────────────
-VERSION = "1.7.0"   # Update 7 — spectre 3 couleurs · flash beats · preset Reggae amélioré
+VERSION = "1.7.1"   # Update 8 (patch) — fix fuites mémoire · dead code · vectorisation
 
 BG      = "#0a0a0a"
 SURF    = "#111111"
@@ -527,6 +530,13 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
         self.main.pack(fill="both", expand=True)
 
     def _clear_main(self):
+        # Annuler l'animation de l'accueil (fix fuite mémoire Update 8)
+        if hasattr(self, "_home_anim_job") and self._home_anim_job:
+            try:
+                self.after_cancel(self._home_anim_job)
+            except Exception:
+                pass
+            self._home_anim_job = None
         self._stop_audio()
         self.preview_running = False
         self._waveform_canvas = None
@@ -556,7 +566,6 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
         self._clear_main()
         self._set_status("Accueil")
 
-        import math, random
 
         # ── Canvas plein écran : halo violet radial + barres spectre statiques ──
         canvas = tk.Canvas(self.main, bg="#080808", highlightthickness=0)
@@ -1358,7 +1367,6 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
 
     def _randomize_gradient_colors(self):
         """Génère deux couleurs vives et saturées pour le dégradé."""
-        import colorsys, random
         h  = random.random()
         h2 = (h + 0.08 + random.random() * 0.22) % 1.0
         s1 = 0.80 + random.random() * 0.20   # très saturé
@@ -2083,6 +2091,7 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
         if self.ffplay_process:
             try:
                 self.ffplay_process.terminate()
+                self.ffplay_process.wait(timeout=2)   # fix zombie process (Update 8)
             except Exception:
                 pass
             self.ffplay_process = None
