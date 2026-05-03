@@ -168,7 +168,9 @@ Le mode **SHORT** extrait automatiquement 60 secondes centrées sur le milieu de
 
 ## 🆕 Historique des mises à jour
 
-### v1.7.1 — Patch optimisation
+<details>
+<summary><b>v1.7.1</b> — Patch optimisation ✅</summary>
+
 - 🐛 Fix fuite mémoire animation accueil (timers accumulés)
 - 🐛 Fix processus ffplay zombie sur Windows
 - 🐛 Fix cache vinyle invalide à chaque frame
@@ -178,18 +180,31 @@ Le mode **SHORT** extrait automatiquement 60 secondes centrées sur le milieu de
 - 🖥️ Interface sans chargement progressif (rendu en une passe)
 - 🧹 Suppression code mort renderer
 
-### v1.7.0 — Spectre 3 couleurs · Flash beats
-- 🎨 Mode 3 couleurs : grave / médiums / aigus
-- ⚡ Flash beats réactif sur les kicks
-- 🌈 Preset Reggae amélioré + 2 nouveaux presets
+</details>
 
-### v1.5.1 — Fix & Polish
+<details>
+<summary><b>v1.7.0</b> — Spectre 3 couleurs · Flash beats ✅</summary>
+
+- 🎨 Mode 3 couleurs : grave / médiums / aigus chacun avec sa couleur
+- ⚡ Flash beats réactif sur les kicks
+- 🌈 Preset Reggae amélioré : rouge/jaune/vert par bande fréquentielle
+- ✨ 2 nouveaux presets : Neon Tricolor · Sunrise
+
+</details>
+
+<details>
+<summary><b>v1.5.1</b> — Fix & Polish ✅</summary>
+
 - 🐛 Fix ligne parasite sur la pochette d'album
 - 🏠 Page d'accueil redesignée avec fond animé et logo
 - 🚀 Panel export redesigné en cards cliquables avec badges colorés
 - 🔢 Version visible dans la fenêtre Réglages ⚙
 
-### v1.5.0 — Couleurs & Fond flottant
+</details>
+
+<details>
+<summary><b>v1.5.0</b> — Couleurs · Fond flottant · Oscilloscope ✅</summary>
+
 - 🎨 Couleur du spectre personnalisable + extraction auto depuis la pochette
 - 🌊 Fond flottant animé réactif aux basses
 - 📊 Oscilloscope — 10ème style de spectre
@@ -197,20 +212,50 @@ Le mode **SHORT** extrait automatiquement 60 secondes centrées sur le milieu de
 - 🎲 Couleurs aléatoires vives pour le dégradé
 - ✨ 5 nouveaux presets : Vinyl Classic · Vinyl Gold · Acid Wave · Purple Dream · Midnight Vinyl
 
-### v1.4.0 — Disque Vinyle
-- 🎵 Pochette sleeve + disque vinyle rotatif réactif
+</details>
 
-### v1.3.0 — Fond dégradé · Miniatures · Plein écran
-- 🎨 Fond dégradé configurable · 🖼 Miniatures auto · ⛶ Plein écran F11
+<details>
+<summary><b>v1.4.0</b> — Disque Vinyle rotatif ✅</summary>
 
-### v1.2.0 — Waveform · Artiste/Titre · Raccourcis
-- 🎚 Waveform cliquable · ✍ Artiste + Titre séparés · ⌨ Raccourcis clavier
+- 🎵 Composition pochette sleeve + disque vinyle rotatif réactif aux beats
+- Deux modes : image sur le disque ou vinyle noir classique
 
-### v1.1.0 — Switch format · Drag & Drop
-- 🔄 Preview 16:9↔9:16 · 📂 Drag & Drop · ⚠️ Vérif FFmpeg · ✅ Validation nom
+</details>
 
-### v1.0.0 — Release initiale
+<details>
+<summary><b>v1.3.0</b> — Fond dégradé · Miniatures · Plein écran ✅</summary>
+
+- 🎨 Fond dégradé configurable avec color pickers
+- 🖼 Miniatures automatiques dans l'historique
+- ⛶ Mode plein écran preview (F11 ou double-clic)
+
+</details>
+
+<details>
+<summary><b>v1.2.0</b> — Waveform · Artiste/Titre · Raccourcis ✅</summary>
+
+- 🎚 Waveform globale cliquable pour naviguer dans le son
+- ✍ Champs Artiste + Titre séparés avec rendu différencié
+- ⌨ Raccourcis clavier : Espace · R · F11 · Échap
+
+</details>
+
+<details>
+<summary><b>v1.1.0</b> — Switch format · Drag & Drop ✅</summary>
+
+- 🔄 Preview 16:9↔9:16
+- 📂 Drag & Drop audio et image
+- ⚠️ Vérification FFmpeg au démarrage
+- ✅ Validation nom projet avant export
+
+</details>
+
+<details>
+<summary><b>v1.0.0</b> — Release initiale ✅</summary>
+
 - 9 styles de spectre · fumée · particules · 3 modes export · interface CustomTkinter
+
+</details>
 
 ---
 
