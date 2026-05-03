@@ -77,18 +77,22 @@ GLOBAL_PRESETS: dict[str, dict] = {
         "bg_mode":         "photo",
     },
     "Reggae Smoke": {
-        "particle_preset": "Énergie",
-        "smoke_preset":    "Dense",
-        "smoke_color":     "Reggae",
-        "spectrum_style":  "Arc plasma",
-        "spectrum_size":   1.20,
-        "spectrum_y":      0.88,
-        "image_zoom":      1.00,
-        "pulse_strength":  1.45,
-        "vinyl_mode":      False,
-        "spectrum_color":  "#22ff44",
-        "floating_bg":     False,
-        "bg_mode":         "photo",
+        "particle_preset":   "Énergie",
+        "smoke_preset":      "Dense",
+        "smoke_color":       "Reggae",
+        "spectrum_style":    "Arc plasma",
+        "spectrum_size":     1.20,
+        "spectrum_y":        0.88,
+        "image_zoom":        1.00,
+        "pulse_strength":    1.45,
+        "vinyl_mode":        False,
+        "spectrum_color":    "#ff2020",   # bass = rouge
+        "spectrum_color_mid": "#ffdd00",  # mid  = jaune
+        "spectrum_color_high": "#20ff50", # high = vert
+        "spectrum_tricolor": True,
+        "spectrum_reactive": True,
+        "floating_bg":       False,
+        "bg_mode":           "photo",
     },
     "Chill Lo-Fi": {
         "particle_preset": "Pluie lumineuse",
@@ -184,6 +188,44 @@ GLOBAL_PRESETS: dict[str, dict] = {
         "bg_mode":         "gradient",
         "gradient_top":    "#120a1e",
         "gradient_bottom": "#0a0512",
+    },
+    "Neon Tricolor": {
+        "particle_preset":    "Énergie",
+        "smoke_preset":       "Cinématique",
+        "smoke_color":        "Bleu néon",
+        "spectrum_style":     "Barres néon",
+        "spectrum_size":      1.15,
+        "spectrum_y":         0.88,
+        "image_zoom":         0.98,
+        "pulse_strength":     1.40,
+        "vinyl_mode":         False,
+        "spectrum_color":     "#ff0080",   # bass = rose
+        "spectrum_color_mid": "#8000ff",   # mid  = violet
+        "spectrum_color_high": "#00e5ff",  # high = cyan
+        "spectrum_tricolor":  True,
+        "spectrum_reactive":  True,
+        "floating_bg":        False,
+        "bg_mode":            "photo",
+    },
+    "Sunrise": {
+        "particle_preset":    "Pluie lumineuse",
+        "smoke_preset":       "Légère",
+        "smoke_color":        "Or chaud",
+        "spectrum_style":     "Symétrie miroir",
+        "spectrum_size":      1.00,
+        "spectrum_y":         0.89,
+        "image_zoom":         1.00,
+        "pulse_strength":     1.00,
+        "vinyl_mode":         False,
+        "spectrum_color":     "#ff4400",   # bass = orange rouge
+        "spectrum_color_mid": "#ffaa00",   # mid  = or
+        "spectrum_color_high": "#ffee88",  # high = jaune doux
+        "spectrum_tricolor":  True,
+        "spectrum_reactive":  False,
+        "floating_bg":        False,
+        "bg_mode":            "gradient",
+        "gradient_top":       "#1a0800",
+        "gradient_bottom":    "#0d0400",
     },
     "Midnight Vinyl": {
         "particle_preset": "Premium",

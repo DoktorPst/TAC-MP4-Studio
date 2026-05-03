@@ -1,4 +1,4 @@
-"""Modèles de données — Update 5 : couleur spectre, fond flottant."""
+"""Modèles — Update 7 : spectre 3 couleurs + réactivité beats."""
 from __future__ import annotations
 from dataclasses import dataclass
 from app.presets import WIDTH, HEIGHT
@@ -32,14 +32,19 @@ class RenderSettings:
     bg_mode: str = "photo"
     gradient_top: str = "#1a1a2e"
     gradient_bottom: str = "#0f3460"
-
     vinyl_mode: bool = False
-    vinyl_black: bool = False     # True = vinyle noir classique (label uniquement)
+    vinyl_black: bool = False
 
     # Update 5
-    spectrum_color: str = "#ffffff"       # couleur de base du spectre (hex)
-    spectrum_color_auto: bool = False     # extraire couleur dominante de la pochette
-    floating_bg: bool = False             # fond qui dérive lentement
+    spectrum_color: str = "#ffffff"
+    spectrum_color_auto: bool = False
+    floating_bg: bool = False
+
+    # Update 7 — spectre 3 couleurs + réactivité
+    spectrum_color_mid: str = "#ffffff"   # couleur médiums
+    spectrum_color_high: str = "#ffffff"  # couleur aigus
+    spectrum_tricolor: bool = False       # activer le dégradé 3 bandes
+    spectrum_reactive: bool = False       # flash couleur sur les kicks
 
     @property
     def is_vertical(self) -> bool:

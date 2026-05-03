@@ -42,6 +42,40 @@ def _tint_bgr(brightness: int, r: int, g: int, b: int) -> tuple[int, int, int]:
     return (int(b * s), int(g * s), int(r * s))
 
 
+def _lerp_color(c1: tuple, c2: tuple, t: float) -> tuple[int, int, int]:
+    """Interpolation linéaire entre deux couleurs RGB."""
+    t = max(0.0, min(1.0, t))
+    return (
+        int(c1[0] + (c2[0] - c1[0]) * t),
+        int(c1[1] + (c2[1] - c1[1]) * t),
+        int(c1[2] + (c2[2] - c1[2]) * t),
+    )
+
+
+def _tricolor_for_bar(i: int, n: int, brightness: int,
+                      c_bass: tuple, c_mid: tuple, c_high: tuple,
+                      kick: float = 0.0, reactive: bool = False) -> tuple[int, int, int]:
+    """Retourne la couleur BGR d'une barre selon sa position (bass→mid→high).
+
+    Update 7 :
+    - Dégradé 3 couleurs sur la largeur du spectre
+    - Mode réactif : flash blanc/brillant sur les kicks
+    """
+    t = i / max(1, n - 1)
+    if t < 0.5:
+        rgb = _lerp_color(c_bass, c_mid, t * 2.0)
+    else:
+        rgb = _lerp_color(c_mid, c_high, (t - 0.5) * 2.0)
+
+    if reactive and kick > 0.3:
+        flash = min(1.0, (kick - 0.3) / 0.7)
+        white = (255, 255, 255)
+        rgb = _lerp_color(rgb, white, flash * 0.65)
+
+    s = brightness / 255.0
+    return (int(rgb[2] * s), int(rgb[1] * s), int(rgb[0] * s))
+
+
 def extract_dominant_color(cover_bgr: np.ndarray) -> str:
     """Extrait la couleur dominante d'une pochette (BGR numpy).
 
@@ -320,8 +354,8 @@ def _spectrum_geometry(settings: RenderSettings, height: int, width: int):
 
 
 def draw_spectrum(frame, bands, rms, bass, mid, high, settings: RenderSettings,
-                  raw_frame=None):
-    """Rendu du spectre. Supporte la couleur personnalisée (Update 5)."""
+                  raw_frame=None, kick: float = 0.0):
+    """Rendu du spectre. Supporte la couleur personnalisée + 3 couleurs (Update 7)."""
     height, width = frame.shape[:2]
     is_v = settings.is_vertical
 
@@ -336,12 +370,28 @@ def draw_spectrum(frame, bands, rms, bass, mid, high, settings: RenderSettings,
     size = settings.spectrum_size
     style = settings.spectrum_style
 
-    # Couleur personnalisée (Update 5)
+    # Update 7 — couleur simple ou 3 bandes
     sr, sg, sb = _parse_hex(settings.spectrum_color)
     use_custom = (sr, sg, sb) != (255, 255, 255)
 
-    def tint(brightness: int) -> tuple:
-        return _tint_bgr(brightness, sr, sg, sb) if use_custom else (brightness, brightness, brightness)
+    if settings.spectrum_tricolor:
+        c_bass = _parse_hex(settings.spectrum_color)
+        c_mid  = _parse_hex(settings.spectrum_color_mid)
+        c_high = _parse_hex(settings.spectrum_color_high)
+
+        def tint(brightness: int, bar_idx: int = 0) -> tuple:
+            return _tricolor_for_bar(bar_idx, bar_count, brightness,
+                                     c_bass, c_mid, c_high,
+                                     kick, settings.spectrum_reactive)
+    else:
+        def tint(brightness: int, bar_idx: int = 0) -> tuple:
+            if settings.spectrum_reactive and kick > 0.3:
+                flash = min(1.0, (kick - 0.3) / 0.7)
+                sr2 = int(sr + (255 - sr) * flash * 0.6)
+                sg2 = int(sg + (255 - sg) * flash * 0.6)
+                sb2 = int(sb + (255 - sb) * flash * 0.6)
+                return _tint_bgr(brightness, sr2, sg2, sb2)
+            return _tint_bgr(brightness, sr, sg, sb) if use_custom else (brightness, brightness, brightness)
 
     # ── Barres premium ────────────────────────────────────────────────────────
     if style == "Barres premium":
@@ -350,10 +400,10 @@ def draw_spectrum(frame, bands, rms, bass, mid, high, settings: RenderSettings,
             x2 = x1 + bar_w
             h = int((height * 0.025 + value * height * 0.21 * size) * (0.82 + bass * 0.45 + rms * 0.2))
             bright = int(np.clip(105 + value * 150 + high * 55, 110, 255))
-            rounded_rectangle(frame, (x1, base_y - h), (x2, base_y), max(1, bar_w // 2), tint(bright), -1)
+            rounded_rectangle(frame, (x1, base_y - h), (x2, base_y), max(1, bar_w // 2), tint(bright, i), -1)
         cv2.line(frame, (start_x, base_y + int(height * 0.022)),
                  (start_x + total_w, base_y + int(height * 0.022)),
-                 tint(245), max(1, int(1 + bass * 5)), lineType=cv2.LINE_AA)
+                 tint(245, bar_count // 2), max(1, int(1 + bass * 5)), lineType=cv2.LINE_AA)
 
     # ── Barres néon (couleur propre, non affectée par tint) ───────────────────
     elif style == "Barres néon":
@@ -385,11 +435,11 @@ def draw_spectrum(frame, bands, rms, bass, mid, high, settings: RenderSettings,
             x2 = x1 + bar_w
             h_half = int((height * 0.015 + value * height * 0.13 * size) * (0.85 + bass * 0.55))
             bright = int(np.clip(115 + value * 140 + high * 55, 120, 255))
-            rounded_rectangle(frame, (x1, center_y - h_half), (x2, center_y), max(1, bar_w // 2), tint(bright), -1)
+            rounded_rectangle(frame, (x1, center_y - h_half), (x2, center_y), max(1, bar_w // 2), tint(bright, i), -1)
             faded = int(bright * 0.65)
-            rounded_rectangle(frame, (x1, center_y), (x2, center_y + h_half), max(1, bar_w // 2), tint(faded), -1)
+            rounded_rectangle(frame, (x1, center_y), (x2, center_y + h_half), max(1, bar_w // 2), tint(faded, i), -1)
         cv2.line(frame, (start_x, center_y), (start_x + total_w, center_y),
-                 tint(255), max(1, int(1.5 + bass * 4)), lineType=cv2.LINE_AA)
+                 tint(255, bar_count // 2), max(1, int(1.5 + bass * 4)), lineType=cv2.LINE_AA)
 
     # ── Arc plasma / Onde plasma (couleurs propres) ───────────────────────────
     elif style == "Arc plasma":
@@ -408,7 +458,7 @@ def draw_spectrum(frame, bands, rms, bass, mid, high, settings: RenderSettings,
             x2 = x1 + bar_w
             h = int((height * 0.012 + value * height * 0.12 * size) * (0.85 + bass * 0.55))
             bright = int(np.clip(105 + value * 150 + high * 55, 110, 255))
-            rounded_rectangle(frame, (x1, center_y - h), (x2, center_y + h), max(1, bar_w // 2), tint(bright), -1)
+            rounded_rectangle(frame, (x1, center_y - h), (x2, center_y + h), max(1, bar_w // 2), tint(bright, i), -1)
 
     # ── Oscilloscope (Update 5) ───────────────────────────────────────────────
     elif style == "Oscilloscope":
@@ -423,7 +473,7 @@ def draw_spectrum(frame, bands, rms, bass, mid, high, settings: RenderSettings,
             y = base_y - int(value * height * 0.18 * size * (0.8 + mid * 0.4))
             pts.append((x, y))
         for i in range(len(pts) - 1):
-            cv2.line(frame, pts[i], pts[i + 1], tint(235),
+            cv2.line(frame, pts[i], pts[i + 1], tint(235, i),
                      max(1, int(2 * width / WIDTH)), lineType=cv2.LINE_AA)
 
 
@@ -577,6 +627,11 @@ def draw_audio_orb(frame, bands, bass, kick, settings: RenderSettings):
 
     sr, sg, sb = _parse_hex(settings.spectrum_color)
     use_c = (sr, sg, sb) != (255, 255, 255)
+    tri = settings.spectrum_tricolor
+    if tri:
+        c_bass = _parse_hex(settings.spectrum_color)
+        c_mid  = _parse_hex(settings.spectrum_color_mid)
+        c_high = _parse_hex(settings.spectrum_color_high)
 
     for i, value in enumerate(sample):
         angle = (i / n) * math.tau - math.pi / 2
@@ -586,7 +641,13 @@ def draw_audio_orb(frame, bands, bass, kick, settings: RenderSettings):
         x2 = int(center[0] + math.cos(angle) * (radius + length))
         y2 = int(center[1] + math.sin(angle) * (radius + length))
         bright = int(np.clip(92 + value * 160 + bass * 40 + kick * 45, 105, 255))
-        color = _tint_bgr(bright, sr, sg, sb) if use_c else (bright, bright, bright)
+        if tri:
+            color = _tricolor_for_bar(i, n, bright, c_bass, c_mid, c_high,
+                                      kick, settings.spectrum_reactive)
+        elif use_c:
+            color = _tint_bgr(bright, sr, sg, sb)
+        else:
+            color = (bright, bright, bright)
         cv2.line(frame, (x1, y1), (x2, y2), color,
                  max(1, int(2 * width / WIDTH)), lineType=cv2.LINE_AA)
 
@@ -656,6 +717,11 @@ def draw_smoke(frame, smoke_blobs, bass, kick, settings: RenderSettings):
 # Z-order : ombre → vinyle (tourne) → pochette sleeve (statique)
 
 _vinyl_overlay_cache: dict[int, Image.Image] = {}
+_vinyl_img_cache: dict[int, Image.Image] = {}    # vinyle.png redimensionné par rayon
+# Chemins des assets (relatifs à ce fichier)
+import os as _os
+_ASSETS_DIR = _os.path.join(_os.path.dirname(_os.path.dirname(__file__)), "img")
+_VINYL_PNG   = _os.path.join(_ASSETS_DIR, "vinyle.png")
 
 
 def _get_vinyl_overlay(radius: int) -> Image.Image:
@@ -717,81 +783,92 @@ def _composite_image(frame: np.ndarray, img_pil: Image.Image, cx: int, cy: int) 
     frame[fy1:fy2, fx1:fx2] = (roi * (1.0 - alp) + src * alp).astype(np.uint8)
 
 
+def _load_vinyl_png(radius: int) -> Image.Image | None:
+    """Charge vinyle.png redimensionné au diamètre voulu, avec cache.
+    Le fichier a déjà le centre transparent (trou du label).
+    """
+    if radius in _vinyl_img_cache:
+        return _vinyl_img_cache[radius]
+    try:
+        raw = Image.open(_VINYL_PNG).convert("RGBA")
+        size = radius * 2
+        result = raw.resize((size, size), Image.LANCZOS)
+        _vinyl_img_cache[radius] = result
+        return result
+    except Exception:
+        return None
+
+
 def _make_vinyl_disk(cover_pil: Image.Image, radius: int, angle: float,
                      vinyl_black: bool = False) -> Image.Image:
-    """Génère le disque vinyle PIL (RGBA) à l'angle donné.
+    """Génère le disque vinyle PIL (RGBA).
 
-    vinyl_black=True : vinyle noir classique, pochette visible uniquement
-                       dans la zone label centrale (30% du rayon).
-    vinyl_black=False : pochette visible sur tout le disque (darkened).
+    Utilise vinyle.png comme corps du disque (avec sillons réels).
+    La pochette s'affiche dans le label central circulaire.
+    En mode vinyl_black=False, pochette visible dans le label uniquement.
     """
     size = radius * 2
-    mask = Image.new("L", (size, size), 0)
-    ImageDraw.Draw(mask).ellipse((0, 0, size - 1, size - 1), fill=255)
     disk = Image.new("RGBA", (size, size), (0, 0, 0, 0))
 
+    # ── Corps vinyle : vinyle.png réel ────────────────────────────────────────
+    vinyl_base = _load_vinyl_png(radius)
+    # ── Fond du disque : noir ou pochette selon le mode ──────────────────────
+    # Le trou du vinyle.png représente 25.8% du rayon total
+    # L'image doit remplir EXACTEMENT cette zone pour ne pas dépasser
+    hole_ratio = 0.367   # mesuré sur vinyle.png (inner_r=188 / cx=512)
+    hole_r = int(radius * hole_ratio)
+
     if vinyl_black:
-        # Corps vinyle noir
-        d = ImageDraw.Draw(disk)
-        d.ellipse((0, 0, size - 1, size - 1), fill=(15, 15, 15, 255))
-        disk.putalpha(mask)
-        # Label central avec pochette
-        label_r = int(radius * 0.32)
-        label_sq = cover_pil.resize((label_r * 2, label_r * 2), Image.LANCZOS)
-        label_mask = Image.new("L", (label_r * 2, label_r * 2), 0)
-        ImageDraw.Draw(label_mask).ellipse((0, 0, label_r * 2 - 1, label_r * 2 - 1), fill=255)
-        lbl = Image.new("RGBA", (label_r * 2, label_r * 2), (0, 0, 0, 0))
-        lbl.paste(label_sq.convert("RGBA"), mask=label_mask)
-        lx = radius - label_r
-        ly = radius - label_r
-        disk.paste(lbl, (lx, ly), mask=label_mask)
+        # Fond noir circulaire → trou reste noir (vinyle classique)
+        base = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+        circ_mask = Image.new("L", (size, size), 0)
+        ImageDraw.Draw(circ_mask).ellipse((0, 0, size - 1, size - 1), fill=255)
+        ImageDraw.Draw(base).ellipse((0, 0, size - 1, size - 1), fill=(10, 10, 10, 255))
+        base.putalpha(circ_mask)
     else:
-        # Cover redimensionnée en carré → cercle
-        sq = cover_pil.resize((size, size), Image.LANCZOS)
-        disk.paste(sq.convert("RGBA"), mask=mask)
-    # Rotation
+        # Fond noir + pochette dans le trou uniquement → ne dépasse PAS le vinyle
+        base = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+        circ_mask = Image.new("L", (size, size), 0)
+        ImageDraw.Draw(circ_mask).ellipse((0, 0, size - 1, size - 1), fill=255)
+        ImageDraw.Draw(base).ellipse((0, 0, size - 1, size - 1), fill=(10, 10, 10, 255))
+        base.putalpha(circ_mask)
+
+        # Pochette dans la zone du trou uniquement
+        label_sq = cover_pil.resize((hole_r * 2, hole_r * 2), Image.LANCZOS).convert("RGBA")
+        label_mask = Image.new("L", (hole_r * 2, hole_r * 2), 0)
+        ImageDraw.Draw(label_mask).ellipse((0, 0, hole_r * 2 - 1, hole_r * 2 - 1), fill=255)
+        base.paste(label_sq, (radius - hole_r, radius - hole_r), mask=label_mask)
+
+    disk = base
+
+    # ── Superposer vinyle.png (sillons opaques, trou transparent) ─────────────
+    if vinyl_base is not None:
+        disk = Image.alpha_composite(disk, vinyl_base)
+
+    # ── Rotation globale (fond + vinyle ensemble) ─────────────────────────────
     disk = disk.rotate(-(angle % 360), resample=Image.BILINEAR, expand=False)
-    # Grooves (statiques — appliqués après rotation pour rester fixes)
-    disk = Image.alpha_composite(disk, _get_vinyl_overlay(radius))
-    # Trou central
-    d = ImageDraw.Draw(disk)
+
+    # ── Trou de broche (après rotation, toujours centré) ─────────────────────
     c = size // 2
-    hr = max(3, int(radius * 0.030))
-    d.ellipse((c - hr, c - hr, c + hr, c + hr), fill=(10, 10, 10, 255))
-    # Reflet crescent statique (ne tourne pas)
-    shine = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    sd = ImageDraw.Draw(shine)
-    off = int(radius * 0.20)
-    ax, ay = int(radius * 0.75), int(radius * 0.60)
-    sd.ellipse((c - ax + off, c - ay + off, c + ax + off, c + ay + off),
-               fill=(255, 255, 255, 22))
-    # Masque circulaire sur le reflet
-    shine_mask = Image.new("L", (size, size), 0)
-    ImageDraw.Draw(shine_mask).ellipse((0, 0, size - 1, size - 1), fill=255)
-    shine.putalpha(Image.fromarray(
-        np.minimum(np.array(shine.getchannel("A")), np.array(shine_mask))
-    ))
-    disk = Image.alpha_composite(disk, shine)
+    hr = max(2, int(radius * 0.022))
+    ImageDraw.Draw(disk).ellipse((c - hr, c - hr, c + hr, c + hr), fill=(8, 8, 8, 255))
+
     return disk
 
 
 def _make_sleeve(cover_pil: Image.Image, side: int) -> Image.Image:
-    """Génère la pochette d'album (RGBA) avec coins arrondis et bordure."""
-    sq = cover_pil.resize((side, side), Image.LANCZOS)
+    """Génère la pochette d'album (RGBA) avec coins arrondis.
+    Le cadre réactif est dessiné directement sur le numpy frame (draw_vinyl_disk).
+    """
     radius_corner = max(4, int(side * 0.045))
-
     result = Image.new("RGBA", (side, side), (0, 0, 0, 0))
-    # Masque coins arrondis
+    sq = cover_pil.resize((side, side), Image.LANCZOS).convert("RGBA")
     mask = Image.new("L", (side, side), 0)
-    md = ImageDraw.Draw(mask)
-    md.rounded_rectangle((0, 0, side - 1, side - 1), radius=radius_corner, fill=255)
-    result.paste(sq.convert("RGBA"), mask=mask)
+    ImageDraw.Draw(mask).rounded_rectangle((0, 0, side - 1, side - 1),
+                                            radius=radius_corner, fill=255)
+    result.paste(sq, mask=mask)
 
-    # Bordure fine + reflet haut (une seule passe, inséré d'1px pour eviter l'artefact de bord)
-    bd = ImageDraw.Draw(result)
-    bd.rounded_rectangle((1, 1, side - 2, side - 2),
-                          radius=max(3, radius_corner - 1),
-                          outline=(220, 220, 220, 85), width=2)
+
     return result
 
 
@@ -851,12 +928,16 @@ def draw_vinyl_disk(
 
     # ── Vinyle (arrière-plan) ──────────────────────────────────────────────────
     cover_pil = Image.fromarray(cv2.cvtColor(cover_bgr, cv2.COLOR_BGR2RGB))
-    vinyl_img  = _make_vinyl_disk(cover_pil, vinyl_r, angle, vinyl_black=settings.vinyl_black)
+    use_image_on_disk = not settings.vinyl_black
+    vinyl_img  = _make_vinyl_disk(cover_pil, vinyl_r, angle,
+                                  vinyl_black=not use_image_on_disk)
     _composite_image(frame, vinyl_img, vinyl_cx, vinyl_cy)
 
     # ── Pochette (avant-plan) ─────────────────────────────────────────────────
     sleeve_img = _make_sleeve(cover_pil, sleeve_side)
     _composite_image(frame, sleeve_img, group_cx, group_cy)
+
+
 
 
 # ── Rendu complet d'une frame ─────────────────────────────────────────────────
@@ -901,7 +982,7 @@ def render_frame(bg, cover, particles, smoke_blobs, spec_frame, metrics,
     # Pochette / Vinyle — selon le mode
     if settings.vinyl_mode:
         # Vitesse de rotation : base + réactivité bass + kick
-        new_vinyl_angle = vinyl_angle + 1.8 + bass * 3.5 + kick * 14.0
+        new_vinyl_angle = vinyl_angle + 1.8   # vitesse constante — bass/kick n'affectent plus la rotation
         draw_vinyl_disk(frame, cover, vinyl_angle, bass, kick, settings)
     else:
         new_vinyl_angle = vinyl_angle
@@ -917,7 +998,7 @@ def render_frame(bg, cover, particles, smoke_blobs, spec_frame, metrics,
                        artist=settings.artist_text)
 
     if settings.spectrum_style != "Cercle radial":
-        draw_spectrum(frame, smoothed_bands, rms, bass, mid, high, settings, raw_frame=raw_frame)
+        draw_spectrum(frame, smoothed_bands, rms, bass, mid, high, settings, raw_frame=raw_frame, kick=kick)
 
     draw_vignette(frame)
     return frame, particles, smoke_blobs, smoothed_bands, new_vinyl_angle
