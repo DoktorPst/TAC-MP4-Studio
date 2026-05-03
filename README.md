@@ -12,7 +12,7 @@
 [![OpenCV](https://img.shields.io/badge/OpenCV-4.8+-5C3EE8?style=for-the-badge&logo=opencv&logoColor=white)](https://opencv.org)
 [![CustomTkinter](https://img.shields.io/badge/CustomTkinter-5.2+-1F6FEB?style=for-the-badge)](https://github.com/TomSchimansky/CustomTkinter)
 [![FFmpeg](https://img.shields.io/badge/FFmpeg-required-007808?style=for-the-badge&logo=ffmpeg&logoColor=white)](https://ffmpeg.org)
-[![Version](https://img.shields.io/badge/Version-1.5.1-7c3aed?style=for-the-badge)](#-roadmap)
+[![Version](https://img.shields.io/badge/Version-1.7.1-7c3aed?style=for-the-badge)](#-roadmap)
 [![License](https://img.shields.io/badge/License-MIT-22c55e?style=for-the-badge)](LICENSE)
 
 </div>
@@ -168,6 +168,21 @@ Le mode **SHORT** extrait automatiquement 60 secondes centrées sur le milieu de
 
 ## 🆕 Historique des mises à jour
 
+### v1.7.1 — Patch optimisation
+- 🐛 Fix fuite mémoire animation accueil (timers accumulés)
+- 🐛 Fix processus ffplay zombie sur Windows
+- 🐛 Fix cache vinyle invalide à chaque frame
+- 🐛 Fix crash user_presets config absente
+- ⚡ Analyse audio ~40× plus rapide (raw_frames vectorisé numpy)
+- 🎵 Qualité audio export améliorée (resampler SoX haute qualité)
+- 🖥️ Interface sans chargement progressif (rendu en une passe)
+- 🧹 Suppression code mort renderer
+
+### v1.7.0 — Spectre 3 couleurs · Flash beats
+- 🎨 Mode 3 couleurs : grave / médiums / aigus
+- ⚡ Flash beats réactif sur les kicks
+- 🌈 Preset Reggae amélioré + 2 nouveaux presets
+
 ### v1.5.1 — Fix & Polish
 - 🐛 Fix ligne parasite sur la pochette d'album
 - 🏠 Page d'accueil redesignée avec fond animé et logo
@@ -307,7 +322,9 @@ python main.py
 | v1.4 | ✅ | Disque vinyle rotatif |
 | v1.5 | ✅ | Couleur spectre · Fond flottant · Oscilloscope |
 | v1.5.1 | ✅ | Fix glitch · Accueil animé · Export cards |
-| v1.6 | 📋 | Format carré 1:1 · Export par lots |
+| v1.7.0 | ✅ | Spectre 3 couleurs · Flash beats · Nouveaux presets |
+| v1.7.1 | ✅ | Patch perf · Fix fuites · UI instantanée · Audio SoX |
+| **v1.8** | 📋 | Texte amélioré · Police custom · Sous-titres |
 
 ---
 
