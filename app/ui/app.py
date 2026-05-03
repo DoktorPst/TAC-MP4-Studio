@@ -787,6 +787,10 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
     def show_history(self):
         self._clear_main()
         self._set_status("Historique")
+        # Masque pendant la construction
+        _cover = ctk.CTkFrame(self.main, fg_color=BG)
+        _cover.place(relx=0, rely=0, relwidth=1, relheight=1)
+        self.main.update_idletasks()
         outer = ctk.CTkFrame(self.main, fg_color=BG)
         outer.pack(fill="both", expand=True, padx=32, pady=24)
 
@@ -807,6 +811,12 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
                                         scrollbar_button_color=SURF3,
                                         scrollbar_button_hover_color=ACCENT)
         scroll.pack(fill="both", expand=True)
+
+        self.main.update_idletasks()
+        try:
+            _cover.destroy()
+        except Exception:
+            pass
 
         for item in items:
             card = _card(scroll)
@@ -904,6 +914,9 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
         if self.audio_path:
             self._load_waveform(self.audio_path)
 
+        # Suspendre le rendu tkinter pendant la construction de l'UI
+        self.main.update_idletasks()
+
         left = ctk.CTkFrame(self.main, fg_color=BG)
         left.pack(side="left", fill="both", expand=True, padx=(16, 8), pady=16)
         right_outer = ctk.CTkFrame(self.main, fg_color=BG, width=380)
@@ -973,7 +986,10 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
         _btn(br, "🖼 Pochette", self.show_step_image, small=True, height=28).pack(
             side="left", fill="x", expand=True)
 
-        # TabView 5 onglets
+        # TabView 5 onglets — construit dans un frame caché pour éviter le rendu progressif
+        _build_cover = ctk.CTkFrame(right_outer, fg_color=BG)
+        _build_cover.place(relx=0, rely=0, relwidth=1, relheight=1)
+
         tabs = ctk.CTkTabview(right_outer,
                               fg_color=SURF2,
                               segmented_button_fg_color=SURF3,
@@ -1275,6 +1291,14 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
         ctk.CTkFrame(te, height=1, fg_color=BORDER, corner_radius=0).pack(fill="x", pady=(10, 0))
         _btn(te, "  ▶  GÉNÉRER", self._start_export,
              accent=True, height=50, font=ctk.CTkFont("Segoe UI", 13, "bold")).pack(fill="x", pady=(10, 0))
+
+        # Tout est construit — retirer le masque et rafraîchir en une seule passe
+        self.main.update_idletasks()
+        try:
+            _build_cover.destroy()
+        except Exception:
+            pass
+        self.main.update_idletasks()
 
         self._prepare_preview()
 
