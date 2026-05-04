@@ -1546,47 +1546,88 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
         win = ctk.CTkToplevel(self)
         win.title("Réglages")
         win.configure(fg_color=BG)
-        win.geometry("420x380")
-        win.resizable(False, False)
+        win.geometry("560x600")
+        win.minsize(520, 560)
+        win.resizable(True, True)
         win.grab_set()
 
+        # ── Scrollable container ──────────────────────────────────────────────
+        scroll = ctk.CTkScrollableFrame(win, fg_color=BG, scrollbar_button_color=SURF3)
+        scroll.pack(fill="both", expand=True, padx=0, pady=0)
+
         # Header
-        hdr_row = ctk.CTkFrame(win, fg_color="transparent")
-        hdr_row.pack(fill="x", padx=24, pady=(20, 4))
+        hdr_row = ctk.CTkFrame(scroll, fg_color="transparent")
+        hdr_row.pack(fill="x", padx=28, pady=(22, 4))
         ctk.CTkLabel(hdr_row, text="Réglages", font=FONT_H1, text_color=TEXT).pack(side="left")
-        ctk.CTkLabel(hdr_row,
-                     text=f"v{VERSION}",
-                     text_color=ACCLT,
+        ctk.CTkLabel(hdr_row, text=f"v{VERSION}", text_color=ACCLT,
                      font=ctk.CTkFont("Segoe UI", 10, "bold"),
                      fg_color=SURF2, corner_radius=6).pack(side="right", padx=(0, 4), ipadx=8, ipady=4)
-        ctk.CTkLabel(win, text="TAC MP4 Studio", text_color=MUTED, font=FONT_MU).pack(
-            anchor="w", padx=24, pady=(0, 16))
+        ctk.CTkLabel(scroll, text="TAC MP4 Studio — Générateur de vidéos musicales réactives",
+                     text_color=MUTED, font=FONT_MU).pack(anchor="w", padx=28, pady=(0, 18))
 
-        ctk.CTkFrame(win, height=1, fg_color=BORDER, corner_radius=0).pack(fill="x", padx=24)
+        ctk.CTkFrame(scroll, height=1, fg_color=BORDER, corner_radius=0).pack(fill="x", padx=28)
 
-        # Raccourcis clavier
-        ctk.CTkLabel(win, text="Raccourcis clavier", text_color=ACCLT,
-                     font=FONT_SEC).pack(anchor="w", padx=24, pady=(16, 8))
+        # ── Raccourcis clavier ────────────────────────────────────────────────
+        ctk.CTkLabel(scroll, text="Raccourcis clavier", text_color=ACCLT,
+                     font=FONT_SEC).pack(anchor="w", padx=28, pady=(18, 8))
 
         shortcuts = [
-            ("Espace",    "Play / Pause la preview audio"),
-            ("R",         "Recharger la preview"),
-            ("F11",       "Ouvrir la preview en plein écran"),
-            ("Échap",     "Fermer le plein écran / Retour accueil"),
-            ("Double-clic", "Ouvrir la preview en plein écran"),
+            ("Espace",       "Play / Pause la preview audio"),
+            ("R",            "Recharger la preview"),
+            ("F11",          "Ouvrir la preview en plein écran"),
+            ("Échap",        "Fermer le plein écran / Retour accueil"),
+            ("Double-clic",  "Ouvrir la preview en plein écran"),
         ]
         for key, desc in shortcuts:
-            row = ctk.CTkFrame(win, fg_color=SURF2, corner_radius=8)
-            row.pack(fill="x", padx=24, pady=3)
+            row = ctk.CTkFrame(scroll, fg_color=SURF2, corner_radius=8)
+            row.pack(fill="x", padx=28, pady=3)
             ctk.CTkLabel(row, text=key, text_color=ACCLT, font=FONT_SEC,
-                         width=120, anchor="w").pack(side="left", padx=12, pady=8)
+                         width=130, anchor="w").pack(side="left", padx=14, pady=9)
             ctk.CTkLabel(row, text=desc, text_color=TEXT, font=FONT_SM,
-                         anchor="w").pack(side="left", padx=(0, 12))
+                         anchor="w").pack(side="left", padx=(0, 14), fill="x", expand=True)
 
-        ctk.CTkFrame(win, height=1, fg_color=BORDER, corner_radius=0).pack(
-            fill="x", padx=24, pady=(16, 0))
+        ctk.CTkFrame(scroll, height=1, fg_color=BORDER, corner_radius=0).pack(
+            fill="x", padx=28, pady=(18, 0))
 
-        _btn(win, "Fermer", win.destroy, width=120, height=34, small=True).pack(pady=16)
+        # ── Réseaux sociaux ───────────────────────────────────────────────────
+        ctk.CTkLabel(scroll, text="Retrouve-nous", text_color=ACCLT,
+                     font=FONT_SEC).pack(anchor="w", padx=28, pady=(18, 8))
+
+        socials = [
+            ("🟣  Twitch — DoktorP3st",       "https://www.twitch.tv/doktorp3st"),
+            ("🟣  Twitch — Paglorieux",        "https://www.twitch.tv/paglorieux"),
+            ("🔴  YouTube — TheAuraliaCryia",  "https://www.youtube.com/@TheAuraliaCryia"),
+            ("🔴  YouTube — Paglorieux",       "https://www.youtube.com/@Paglorieux"),
+        ]
+        for label, url in socials:
+            row = ctk.CTkFrame(scroll, fg_color=SURF2, corner_radius=8)
+            row.pack(fill="x", padx=28, pady=3)
+            ctk.CTkLabel(row, text=label, text_color=TEXT, font=FONT_SM,
+                         anchor="w").pack(side="left", padx=14, pady=9, fill="x", expand=True)
+            def _open(u=url):
+                import webbrowser
+                webbrowser.open(u)
+            ctk.CTkButton(row, text="Ouvrir ↗", command=_open,
+                          fg_color="transparent", hover_color=SURF3,
+                          text_color=ACCLT, font=FONT_MU,
+                          width=80, height=28, corner_radius=6).pack(side="right", padx=10)
+
+        ctk.CTkFrame(scroll, height=1, fg_color=BORDER, corner_radius=0).pack(
+            fill="x", padx=28, pady=(18, 0))
+
+        # ── À propos ──────────────────────────────────────────────────────────
+        ctk.CTkLabel(scroll, text="À propos", text_color=ACCLT,
+                     font=FONT_SEC).pack(anchor="w", padx=28, pady=(18, 6))
+        about_text = (
+            "TAC MP4 Studio est un générateur de vidéos musicales réactives,\n"
+            "open source et gratuit. Alternative à Tuneform, 100% offline.\n\n"
+            "Développé par DoktorP3st · Licence MIT"
+        )
+        ctk.CTkLabel(scroll, text=about_text, text_color=MUTED, font=FONT_MU,
+                     justify="left", anchor="w").pack(anchor="w", padx=28, pady=(0, 18))
+
+        # Fermer
+        _btn(scroll, "Fermer", win.destroy, width=130, height=36, small=True).pack(pady=(4, 24))
 
     def _on_bg_mode_changed(self):
         self._refresh_gradient_visibility()
