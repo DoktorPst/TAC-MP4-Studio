@@ -39,7 +39,7 @@ from app.presets import (
     GLOBAL_PRESETS, PARTICLE_PRESETS, SMOKE_COLORS, SMOKE_PRESETS, SPECTRUM_STYLES,
     PREVIEW_SECONDS, PREVIEW_W, PREVIEW_H, SHORT_WIDTH, SHORT_HEIGHT, FPS,
 )
-from app.renderer import load_cover_image, render_frame
+from app.renderer import load_cover_image, render_frame, get_font_names
 
 PREVIEW_W_V = 304
 PREVIEW_H_V = 540
@@ -209,6 +209,9 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
         self.spectrum_color_auto = tk.BooleanVar(value=bool(settings.get("spectrum_color_auto", False)))
         self.floating_bg         = tk.BooleanVar(value=bool(settings.get("floating_bg", False)))
 
+        # Police du texte (Update 8b)
+        self.font_name = tk.StringVar(value=settings.get("font_name", "Défaut"))
+
         # Update 7 — spectre 3 couleurs + réactivité
         self.spectrum_color_mid  = settings.get("spectrum_color_mid",  "#ffffff")
         self.spectrum_color_high = settings.get("spectrum_color_high", "#ffffff")
@@ -231,6 +234,7 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
         self.preview_smoothed        = np.zeros(84, dtype=np.float32)
         self.photo: ImageTk.PhotoImage | None = None
         self.is_rendering            = False
+        self._preview_job: str | None = None
         self._persist_job: str | None = None
         self._export_overlay_frame: ctk.CTkFrame | None = None
         self._ffmpeg_banner: ctk.CTkFrame | None = None
@@ -1102,9 +1106,30 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
                      font=FONT_SM).pack(fill="x", pady=(2, 4))
         self._text_preview_lbl = ctk.CTkLabel(ta, text="", text_color=ACCLT, font=FONT_MU, anchor="w")
         self._text_preview_lbl.pack(anchor="w", pady=(0, 2))
-        self.artist_text.trace_add("write", lambda *_: self._update_text_preview())
-        self.title_text.trace_add("write",  lambda *_: self._update_text_preview())
+        # Stocker les ids pour pouvoir supprimer les traces plus tard
+        if hasattr(self, "_text_trace_ids"):
+            for var, tid in self._text_trace_ids:
+                try: var.trace_remove("write", tid)
+                except Exception: pass
+        def _on_text_change(*_):
+            self._update_text_preview()
+            self._auto_fill_project_name()
+        tid1 = self.artist_text.trace_add("write", _on_text_change)
+        tid2 = self.title_text.trace_add("write",  _on_text_change)
+        self._text_trace_ids = [(self.artist_text, tid1), (self.title_text, tid2)]
         self._update_text_preview()
+        _sep(ta)
+
+        # Sélection de police
+        ctk.CTkLabel(ta, text="Police", text_color=MUTED, font=FONT_MU, anchor="w").pack(anchor="w", pady=(8, 2))
+        font_names = get_font_names()
+        ctk.CTkComboBox(ta, variable=self.font_name,
+                        values=font_names,
+                        command=lambda _: self._on_setting_changed(),
+                        fg_color=SURF3, border_color=BORDER,
+                        button_color=SURF2, button_hover_color=BORDER,
+                        dropdown_fg_color=SURF2, text_color=TEXT,
+                        font=FONT_SM).pack(fill="x", pady=(0, 6))
         _sep(ta)
         self._slider_row(ta, "Texte X", self.text_x, 0.05, 0.95)
         self._slider_row(ta, "Texte Y", self.text_y, 0.15, 0.92)
@@ -1225,6 +1250,7 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
                                               fg_color=SURF3, border_color=BORDER,
                                               text_color=TEXT, font=FONT_SM)
         self._proj_name_entry.pack(fill="x", pady=(2, 2))
+        self._auto_fill_project_name()   # remplir depuis Artiste + Titre si dispo
         self._proj_name_error = ctk.CTkLabel(te, text="", text_color=DANGER, font=FONT_MU, anchor="w")
         self._proj_name_error.pack(anchor="w", pady=(0, 8))
         ctk.CTkLabel(te, text="Preview départ (sec)", text_color=MUTED, font=FONT_MU, anchor="w").pack(anchor="w")
@@ -1578,8 +1604,11 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
     # ── Update text preview ───────────────────────────────────────────────────
 
     def _update_text_preview(self):
-        artist = self.artist_text.get().strip()
-        title  = self.title_text.get().strip()
+        try:
+            artist = self.artist_text.get().strip()
+            title  = self.title_text.get().strip()
+        except Exception:
+            return
         if artist and title:
             preview = f'"{artist}" · "{title}"'
         elif artist:
@@ -1589,7 +1618,10 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
         else:
             preview = "Aucun texte affiché"
         if hasattr(self, "_text_preview_lbl"):
-            self._text_preview_lbl.configure(text=f"→ {preview}")
+            try:
+                self._text_preview_lbl.configure(text=f"→ {preview}")
+            except Exception:
+                pass
 
     def _capture_hd_frame(self):
         """Rend une frame unique en résolution réelle (1920×1080 ou 1080×1920)
@@ -1691,6 +1723,27 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
              accent=True, small=True, height=32, width=160).pack(side="right", padx=16, pady=14)
         _btn(bar, "✕  Fermer", win.destroy,
              small=True, height=32, width=90).pack(side="right", padx=(0, 8), pady=14)
+
+    def _auto_fill_project_name(self):
+        """Remplit auto le nom de projet avec Artiste - Titre si le champ est vide."""
+        try:
+            artist = self.artist_text.get().strip()
+            title  = self.title_text.get().strip()
+        except Exception:
+            return
+        if artist and title:
+            auto = f"{artist} - {title}"
+        elif artist:
+            auto = artist
+        elif title:
+            auto = title
+        else:
+            return
+        current = self.project_name_var.get().strip()
+        last_auto = getattr(self, "_last_auto_proj", "")
+        if not current or current == last_auto:
+            self._last_auto_proj = auto
+            self.project_name_var.set(auto)
 
     def _toggle_preview_format(self):
         self.preview_is_vertical = not self.preview_is_vertical
@@ -1813,6 +1866,7 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
             "spectrum_color_high":  self.spectrum_color_high,
             "spectrum_tricolor":    bool(self.spectrum_tricolor.get()),
             "spectrum_reactive":    bool(self.spectrum_reactive.get()),
+            "font_name":            self.font_name.get(),
         }
         self.config_data["user_presets"] = self.user_presets
         save_config(self.config_data)
@@ -1949,6 +2003,7 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
             spectrum_color_high=self.spectrum_color_high,
             spectrum_tricolor=bool(self.spectrum_tricolor.get()),
             spectrum_reactive=bool(self.spectrum_reactive.get()),
+            font_name=self.font_name.get(),
         )
 
     # ══════════════════════════════════════════════════════════════════════════
@@ -1983,7 +2038,7 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
                 self.preview_index     = 0
                 self.preview_ready     = True
                 self.preview_running   = True
-                self.after(0, self._tick_preview)
+                self._preview_job = self.after(0, self._tick_preview)
                 self.after(0, self._draw_waveform)
                 self.after(0, lambda: self._set_status(f"Preview [{fmt}] active", SUCCESS))
             except Exception as exc:
@@ -2015,7 +2070,7 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
             pass
 
     def _tick_preview(self):
-        if not self.preview_running or not self.preview_ready or self.preview_features is None:
+        if not self.preview_running or self.is_rendering or not self.preview_ready or self.preview_features is None:
             return
 
         s = self._current_settings(preview=True)
@@ -2058,7 +2113,7 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
 
         if wrap_w < 10 or wrap_h < 10:
             # UI pas encore prête — retry au prochain tick
-            self.after(int(1000 / FPS), self._tick_preview)
+            self._preview_job = self.after(int(1000 / FPS), self._tick_preview)
             return
 
         if self.preview_is_vertical:
@@ -2082,7 +2137,7 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
         if not self.audio_playing:
             self.preview_index += 1
 
-        self.after(int(1000 / FPS), self._tick_preview)
+        self._preview_job = self.after(int(1000 / FPS), self._tick_preview)
 
     def _play_preview_audio(self):
         import subprocess as _sp
@@ -2162,22 +2217,26 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
         shutil.copy2(img, id_)
         return str(ad), str(id_)
 
+    # ── Overlay export (popup simple) ────────────────────────────────────────
+
     def _show_export_overlay(self, label):
         if not hasattr(self, "preview_label") or not self.preview_label:
             return
-        ov = ctk.CTkFrame(self.preview_label, fg_color="#050505", corner_radius=0)
+        ov = ctk.CTkFrame(self.preview_wrap, fg_color="#050505", corner_radius=0)
         ov.place(relx=0, rely=0, relwidth=1, relheight=1)
         self._export_overlay_frame = ov
         box = ctk.CTkFrame(ov, fg_color=SURF2, corner_radius=14,
                            border_color=BORDER, border_width=1,
                            width=360, height=160)
         box.place(relx=0.5, rely=0.5, anchor="center")
+        box.pack_propagate(False)
         ctk.CTkLabel(box, text=label, font=FONT_H2, text_color=TEXT).pack(pady=(22, 8))
         self._exp_bar = ctk.CTkProgressBar(box, progress_color=ACCENT, fg_color=SURF3)
         self._exp_bar.pack(fill="x", padx=32, pady=6)
         self._exp_bar.set(0)
         self._exp_detail = ctk.CTkLabel(box, text="Préparation...", text_color=MUTED, font=FONT_MU)
         self._exp_detail.pack(pady=(4, 0))
+        self.update_idletasks()
 
     def _update_export_overlay(self, text):
         self._set_status(text, WARN)
@@ -2200,12 +2259,14 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
         self.update_idletasks()
 
     def _hide_export_overlay(self):
-        if self._export_overlay_frame:
+        if hasattr(self, "_export_overlay_frame") and self._export_overlay_frame:
             try:
                 self._export_overlay_frame.destroy()
             except Exception:
                 pass
             self._export_overlay_frame = None
+        self._exp_bar    = None
+        self._exp_detail = None
 
     def _start_export(self):
         if self.is_rendering:
