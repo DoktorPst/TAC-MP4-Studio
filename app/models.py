@@ -46,6 +46,9 @@ class RenderSettings:
     spectrum_tricolor: bool = False       # activer le dégradé 3 bandes
     spectrum_reactive: bool = False       # flash couleur sur les kicks
 
+    # Texte — police
+    font_name: str = "Défaut"             # nom affiché (clé dans FONT_REGISTRY)
+
     @property
     def is_vertical(self) -> bool:
         return self.output_height > self.output_width

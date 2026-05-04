@@ -21,7 +21,9 @@ from app.presets import (
 
 # ── Caches ────────────────────────────────────────────────────────────────────
 _vignette_cache: dict[tuple[int, int], np.ndarray] = {}
-_font_cache: dict[tuple[int, bool], Any] = {}
+_font_cache: dict[tuple[int, bool, str], Any] = {}
+_font_registry: dict[str, str | None] = {}
+_font_registry_built: bool = False
 _color_cache: dict[str, tuple[int, int, int]] = {}   # hex → (r,g,b)
 
 
@@ -101,19 +103,88 @@ def extract_dominant_color(cover_bgr: np.ndarray) -> str:
 
 # ── Utilitaires ───────────────────────────────────────────────────────────────
 
-def safe_font(size: int, bold: bool = False) -> Any:
+def _build_font_registry() -> None:
+    """Construit le registre des polices (dossier fonts/ + système Windows)."""
+    global _font_registry, _font_registry_built
+    if _font_registry_built:
+        return
+    import os as _os2, platform
+
+    fonts_dir = _os2.path.join(_os2.path.dirname(_os2.path.dirname(__file__)), "fonts")
+    # Noms affichés → fichier sans extension
+    bundled = {
+        "Liberation Sans":   "LiberationSans-Bold",
+        "Liberation Serif":  "LiberationSerif-Bold",
+        "Liberation Mono":   "LiberationMono-Bold",
+        "Carlito":           "Carlito-Bold",
+        "Caladea":           "Caladea-Bold",
+        "Montserrat":        "Montserrat-Bold",
+        "Oswald":            "Oswald-Bold",
+        "Bebas Neue":        "BebasNeue-Regular",
+        "Russo One":         "RussoOne-Regular",
+        "Pacifico":          "Pacifico-Regular",
+        "Raleway":           "Raleway-Bold",
+        "Playfair Display":  "PlayfairDisplay-Bold",
+    }
+    registry: dict[str, str | None] = {"Défaut": None}
+    if _os2.path.isdir(fonts_dir):
+        for label, stem in bundled.items():
+            for ext in (".ttf", ".otf"):
+                path = _os2.path.join(fonts_dir, stem + ext)
+                if _os2.path.isfile(path):
+                    registry[label] = path
+                    break
+
+    # Polices Windows sympas
+    if platform.system() == "Windows":
+        wf = _os2.path.join(_os2.environ.get("WINDIR", "C:/Windows"), "Fonts")
+        win = {
+            "Impact":      "impact.ttf",
+            "Georgia":     "georgiabd.ttf",
+            "Trebuchet":   "trebucbd.ttf",
+            "Arial Black": "ariblk.ttf",
+        }
+        for label, fname in win.items():
+            p = _os2.path.join(wf, fname)
+            if _os2.path.isfile(p):
+                registry[label] = p
+        # Segoe UI toujours dispo sur Windows
+        seg = _os2.path.join(wf, "segoeuib.ttf")
+        if _os2.path.isfile(seg):
+            registry["Segoe UI"] = seg
+
+    _font_registry = registry
+    _font_registry_built = True
+
+
+def get_font_names() -> list[str]:
+    _build_font_registry()
+    return list(_font_registry.keys())
+
+
+def safe_font(size: int, bold: bool = False, font_name: str = "Défaut") -> Any:
+    """Charge une police PIL depuis le registre. Résultat mis en cache par (size, bold, font_name)."""
+    _build_font_registry()
     size = max(12, (size // 2) * 2)
-    key = (size, bold)
+    key = (size, bold, font_name)
     if key not in _font_cache:
-        candidates = [
-            "C:/Windows/Fonts/segoeuib.ttf" if bold else "C:/Windows/Fonts/segoeui.ttf",
-            "C:/Windows/Fonts/arialbd.ttf"  if bold else "C:/Windows/Fonts/arial.ttf",
-        ]
-        for p in candidates:
-            if Path(p).exists():
-                _font_cache[key] = ImageFont.truetype(p, size=size)
-                break
-        else:
+        path = _font_registry.get(font_name)
+        try:
+            if path:
+                _font_cache[key] = ImageFont.truetype(path, size=size)
+            else:
+                # Défaut : Segoe UI si dispo
+                candidates = [
+                    "C:/Windows/Fonts/segoeuib.ttf" if bold else "C:/Windows/Fonts/segoeui.ttf",
+                    "C:/Windows/Fonts/arialbd.ttf"  if bold else "C:/Windows/Fonts/arial.ttf",
+                ]
+                for p in candidates:
+                    if Path(p).exists():
+                        _font_cache[key] = ImageFont.truetype(p, size=size)
+                        break
+                else:
+                    _font_cache[key] = ImageFont.load_default()
+        except Exception:
             _font_cache[key] = ImageFont.load_default()
     return _font_cache[key]
 
@@ -247,7 +318,7 @@ def _draw_text_line(draw, text, font, x_center, y, alpha, shadow_offset=4):
     draw.text((x, y), text, font=font, fill=(255, 255, 255, alpha))
 
 
-def draw_reactive_text(frame, title, rms, kick, text_x=0.50, text_y=0.70, artist=""):
+def draw_reactive_text(frame, title, rms, kick, text_x=0.50, text_y=0.70, artist="", font_name="Défaut"):
     """Rend le texte artiste + titre sur la frame.
 
     Update 2 : artiste et titre sont deux champs séparés avec tailles différentes.
@@ -268,8 +339,8 @@ def draw_reactive_text(frame, title, rms, kick, text_x=0.50, text_y=0.70, artist
     artist_size = max(16, int(62 * scale * kick_boost))
     title_size  = max(14, int(44 * scale * kick_boost))
 
-    font_artist = safe_font(artist_size, bold=True)
-    font_title  = safe_font(title_size,  bold=False)
+    font_artist = safe_font(artist_size, bold=True,  font_name=font_name)
+    font_title  = safe_font(title_size,  bold=False, font_name=font_name)
 
     img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
     layer = Image.new("RGBA", img.size, (0, 0, 0, 0))
@@ -287,11 +358,6 @@ def draw_reactive_text(frame, title, rms, kick, text_x=0.50, text_y=0.70, artist
         y_artist = base_y - total_h // 2
         y_title  = y_artist + spacing
         _draw_text_line(draw, artist.strip(), font_artist, cx, y_artist, text_alpha)
-        # Ligne de séparation fine entre artiste et titre
-        sep_y = y_artist + int(spacing * 0.78)
-        sep_w = int(width * 0.08)
-        draw.rectangle([(int(cx - sep_w), sep_y), (int(cx + sep_w), sep_y + 1)],
-                       fill=(255, 255, 255, 80))
         _draw_text_line(draw, title.strip(), font_title, cx, y_title, title_alpha)
 
     elif has_artist:
@@ -941,7 +1007,8 @@ def render_frame(bg, cover, particles, smoke_blobs, spec_frame, metrics,
 
     draw_reactive_text(frame, settings.title_text, rms, kick,
                        settings.text_x, eff_text_y,
-                       artist=settings.artist_text)
+                       artist=settings.artist_text,
+                       font_name=getattr(settings, "font_name", "Défaut"))
 
     if settings.spectrum_style != "Cercle radial":
         draw_spectrum(frame, smoothed_bands, rms, bass, mid, high, settings, raw_frame=raw_frame, kick=kick)
