@@ -12,7 +12,7 @@
 [![OpenCV](https://img.shields.io/badge/OpenCV-4.8+-5C3EE8?style=for-the-badge&logo=opencv&logoColor=white)](https://opencv.org)
 [![CustomTkinter](https://img.shields.io/badge/CustomTkinter-5.2+-1F6FEB?style=for-the-badge)](https://github.com/TomSchimansky/CustomTkinter)
 [![FFmpeg](https://img.shields.io/badge/FFmpeg-required-007808?style=for-the-badge&logo=ffmpeg&logoColor=white)](https://ffmpeg.org)
-[![Version](https://img.shields.io/badge/Version-1.7.1-7c3aed?style=for-the-badge)](#-roadmap)
+[![Version](https://img.shields.io/badge/Version-1.7.2-7c3aed?style=for-the-badge)](#-roadmap)
 [![License](https://img.shields.io/badge/License-MIT-22c55e?style=for-the-badge)](LICENSE)
 
 </div>
@@ -167,6 +167,16 @@ Le mode **SHORT** extrait automatiquement 60 secondes centrées sur le milieu de
 ---
 
 ## 🆕 Historique des mises à jour
+
+<details>
+<summary><b>v1.7.2</b> — Polices · Nom auto · Stabilité ✅</summary>
+
+- 🎨 Sélecteur de police dans l'onglet Texte (5 polices bundlées)
+- 📁 Nom de projet auto-rempli depuis Artiste + Titre
+- 🔒 Export overlay stable (popup simple, sans animation)
+- 🐛 Fix crash traces StringVar sur widgets détruits
+
+</details>
 
 <details>
 <summary><b>v1.7.1</b> — Patch optimisation ✅</summary>
@@ -369,7 +379,8 @@ python main.py
 | v1.5.1 | ✅ | Fix glitch · Accueil animé · Export cards |
 | v1.7.0 | ✅ | Spectre 3 couleurs · Flash beats · Nouveaux presets |
 | v1.7.1 | ✅ | Patch perf · Fix fuites · UI instantanée · Audio SoX |
-| **v1.8** | 📋 | Texte amélioré · Police custom · Sous-titres |
+| v1.7.2 | ✅ | Polices bundlées · Nom projet auto · Export stable |
+| **v1.8** | 📋 | Texte amélioré · Taille police · Sous-titres |
 
 ---
 
