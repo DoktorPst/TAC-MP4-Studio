@@ -1,3 +1,13 @@
+> ⚠️ **Petite pause jusqu'à samedi pour try sur Diablo 4 en hardcore**  
+> Prochaine mise à jour : production de masse + fin de la contrainte de génération une par une.
+> 
+> 🎯 Objectifs à court terme :
+> - Export direct vers les réseaux sociaux
+> - Beaucoup plus d’effets personnalisables
+> - Et encore plus à venir
+
+---
+
 <div align="center">
 
 <img src="img/tac.png" width="120" alt="TAC MP4 Studio Logo"/>
