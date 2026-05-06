@@ -49,7 +49,7 @@ ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
 
 # ── Version ───────────────────────────────────────────────────────────────────
-VERSION = "1.7.1"   # Update 8 (patch) — fix fuites mémoire · dead code · vectorisation
+VERSION = "1.8.0"   # v1.8 — Texte amélioré : taille police · sous-titre · ombre paramétrable
 
 BG      = "#0a0a0a"
 SURF    = "#111111"
@@ -212,11 +212,35 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
         # Police du texte (Update 8b)
         self.font_name = tk.StringVar(value=settings.get("font_name", "Défaut"))
 
+        # v1.8 — Texte amélioré
+        self.show_text        = tk.BooleanVar(value=bool(settings.get("show_text", True)))
+        self.font_size_scale  = tk.DoubleVar(value=float(settings.get("font_size_scale",  1.0)))
+        self.subtitle_text    = tk.StringVar(value=settings.get("subtitle_text", ""))
+        self.shadow_intensity = tk.DoubleVar(value=float(settings.get("shadow_intensity", 0.5)))
+        self.shadow_color     = settings.get("shadow_color", "#000000")
+        self.shadow_offset_x  = tk.DoubleVar(value=float(settings.get("shadow_offset_x",  4.0)))
+        self.shadow_offset_y  = tk.DoubleVar(value=float(settings.get("shadow_offset_y",  4.0)))
+
+        # Turbo / Favoris
+        self.user_preset_favorites: set = set(self.config_data.get("user_preset_favorites", []))
+        self._turbo_queue: list[dict]   = []
+        self._turbo_stop:  bool         = False
+        self._turbo_running: bool       = False
+        self._turbo_image: str          = ""
+        self._turbo_view_active: bool   = False
+
         # Update 7 — spectre 3 couleurs + réactivité
         self.spectrum_color_mid  = settings.get("spectrum_color_mid",  "#ffffff")
         self.spectrum_color_high = settings.get("spectrum_color_high", "#ffffff")
         self.spectrum_tricolor   = tk.BooleanVar(value=bool(settings.get("spectrum_tricolor", False)))
         self.spectrum_reactive   = tk.BooleanVar(value=bool(settings.get("spectrum_reactive", False)))
+
+        # Fichiers de test preset (persistés, indépendants du projet courant)
+        _test_dir = Path(__file__).parent.parent.parent / "Test"
+        self.test_audio_path = settings.get("test_audio_path",
+                                            str(_test_dir / "Cobblestone Rain.wav"))
+        self.test_image_path = settings.get("test_image_path",
+                                            str(_test_dir / "Cover.png"))
 
         # ── Preview state ──────────────────────────────────────────────────────
         self.preview_is_vertical  = False
@@ -482,6 +506,12 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
     def _on_drop(self, event):
         raw = event.data.strip()
         paths = re.findall(r"\{([^}]+)\}", raw) if raw.startswith("{") else raw.split()
+
+        # Routage Turbo : si la vue Turbo est active, déléguer
+        if self._turbo_view_active:
+            self._turbo_add_paths(paths)
+            return
+
         audio_found = image_found = ""
         for p in paths:
             ext = Path(p).suffix.lower()
@@ -494,6 +524,7 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
             return
         if audio_found:
             self.audio_path = audio_found
+            self._parse_audio_filename(audio_found)
         if image_found:
             self.image_path = image_found
         if self.audio_path and self.image_path:
@@ -534,6 +565,7 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
         self.main.pack(fill="both", expand=True)
 
     def _clear_main(self):
+        self._turbo_view_active = False
         # Annuler l'animation de l'accueil (fix fuite mémoire Update 8)
         if hasattr(self, "_home_anim_job") and self._home_anim_job:
             try:
@@ -729,7 +761,7 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
              accent=True, height=48, width=340,
              font=ctk.CTkFont("Segoe UI", 13, "bold")).pack(pady=(0, 10))
 
-        # Bouton secondaire
+        # Boutons secondaires
         hist_btn = ctk.CTkButton(inner, text="Historique",
                                  command=self.show_history,
                                  fg_color="transparent",
@@ -738,7 +770,23 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
                                  border_color="#1e1e1e", border_width=1,
                                  font=FONT_SM, corner_radius=8,
                                  height=40, width=340)
-        hist_btn.pack()
+        hist_btn.pack(pady=(0, 6))
+        ctk.CTkButton(inner, text="⚡ TURBO — Production rapide",
+                      command=self.show_turbo,
+                      fg_color="transparent",
+                      hover_color="#161616",
+                      text_color="#f59e0b",
+                      border_color="#2a2000", border_width=1,
+                      font=FONT_SM, corner_radius=8,
+                      height=40, width=340).pack(pady=(0, 6))
+        ctk.CTkButton(inner, text="🎛️  Presets",
+                      command=self.show_presets,
+                      fg_color="transparent",
+                      hover_color="#161616",
+                      text_color=MUTED,
+                      border_color="#1e1e1e", border_width=1,
+                      font=FONT_SM, corner_radius=8,
+                      height=40, width=340).pack()
 
         # Features compactes
         ctk.CTkFrame(inner, height=1, fg_color="#1e1e1e", corner_radius=0).pack(
@@ -909,6 +957,728 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
             self._persist_now()
             self.show_history()
 
+    # ── ⚡ Turbo ──────────────────────────────────────────────────────────────
+
+    def show_turbo(self):
+        self._clear_main()
+        self._turbo_view_active = True
+        self._set_status("⚡ Turbo")
+
+        outer = ctk.CTkFrame(self.main, fg_color=BG)
+        outer.pack(fill="both", expand=True, padx=32, pady=24)
+
+        # En-tête
+        top = ctk.CTkFrame(outer, fg_color="transparent")
+        top.pack(fill="x", pady=(0, 14))
+        ctk.CTkLabel(top, text="⚡ Turbo", font=FONT_H1, text_color="#f59e0b").pack(side="left")
+        _btn(top, "← Accueil", self.show_home, small=True, width=120).pack(side="right")
+        ctk.CTkLabel(top, text="Production rapide · sans preview",
+                     text_color=MUTED, font=FONT_MU).pack(side="left", padx=(14, 0))
+
+        # Carte de contrôles
+        ctrl = _card(outer)
+        ctrl.pack(fill="x", pady=(0, 10))
+        ci = ctk.CTkFrame(ctrl, fg_color="transparent")
+        ci.pack(fill="x", padx=16, pady=12)
+
+        # Ligne 1 : Pochette | Preset ★ | Format
+        r1 = ctk.CTkFrame(ci, fg_color="transparent")
+        r1.pack(fill="x", pady=(0, 8))
+
+        ctk.CTkLabel(r1, text="Pochette", text_color=MUTED, font=FONT_MU, width=60, anchor="w").pack(side="left")
+        self._turbo_img_var = tk.StringVar(value=Path(self._turbo_image).name if self._turbo_image else "")
+        turbo_img_entry = ctk.CTkEntry(r1, textvariable=self._turbo_img_var,
+                                        placeholder_text="Obligatoire pour l'export",
+                                        fg_color=SURF3, border_color=BORDER, text_color=TEXT,
+                                        font=FONT_MU, width=210, state="readonly")
+        turbo_img_entry.pack(side="left", padx=(4, 0))
+        _btn(r1, "📂", self._turbo_pick_image, small=True, width=32, height=28).pack(side="left", padx=(4, 24))
+
+        ctk.CTkLabel(r1, text="Preset ★", text_color=MUTED, font=FONT_MU, width=60, anchor="w").pack(side="left")
+        fav_names = [n for n in self.user_presets if n in self.user_preset_favorites]
+        if not fav_names:
+            fav_names = list(self.user_presets.keys())
+        turbo_preset_values = fav_names if fav_names else ["(aucun preset — créez-en un)"]
+        self._turbo_preset_var = tk.StringVar(value=turbo_preset_values[0])
+        ctk.CTkComboBox(r1, variable=self._turbo_preset_var,
+                        values=turbo_preset_values,
+                        fg_color=SURF3, border_color=BORDER,
+                        button_color=SURF2, button_hover_color=BORDER,
+                        dropdown_fg_color=SURF2, text_color=TEXT,
+                        font=FONT_SM, width=190).pack(side="left", padx=(4, 24))
+
+        ctk.CTkLabel(r1, text="Format", text_color=MUTED, font=FONT_MU, width=50, anchor="w").pack(side="left")
+        self._turbo_format_var = tk.StringVar(value="COMPLET")
+        ctk.CTkComboBox(r1, variable=self._turbo_format_var,
+                        values=["COMPLET", "SHORT", "CHECK"],
+                        fg_color=SURF3, border_color=BORDER,
+                        button_color=SURF2, button_hover_color=BORDER,
+                        dropdown_fg_color=SURF2, text_color=TEXT,
+                        font=FONT_SM, width=130).pack(side="left", padx=(4, 0))
+
+        # Ligne 2 : Actions
+        r2 = ctk.CTkFrame(ci, fg_color="transparent")
+        r2.pack(fill="x")
+        _btn(r2, "➕ Ajouter des fichiers", self._turbo_pick_files,
+             small=True, height=32, width=185).pack(side="left")
+        self._turbo_stop_btn = _btn(r2, "⏹ Stopper", self._turbo_stop_fn,
+                                     height=32, width=110, danger=True)
+        self._turbo_stop_btn.pack(side="right", padx=(6, 0))
+        self._turbo_launch_btn = _btn(r2, "▶ Lancer", self._turbo_start,
+                                       accent=True, height=32, width=110)
+        self._turbo_launch_btn.pack(side="right")
+
+        # En-tête du tableau
+        hdr = ctk.CTkFrame(outer, fg_color=SURF3, corner_radius=6)
+        hdr.pack(fill="x", pady=(0, 2))
+        for col_txt, col_w in [("Fichier audio", 168), ("Pochette", 52),
+                                ("Artiste", 138), ("Titre", 168), ("Statut", 86)]:
+            ctk.CTkLabel(hdr, text=col_txt, text_color=MUTED, font=FONT_MU,
+                         width=col_w, anchor="w").pack(side="left", padx=6, pady=5)
+        ctk.CTkLabel(hdr, text="", width=42).pack(side="right")
+
+        # Zone scrollable des lignes
+        self._turbo_scroll = ctk.CTkScrollableFrame(outer, fg_color="transparent",
+                                                     scrollbar_button_color=SURF3,
+                                                     scrollbar_button_hover_color=ACCENT)
+        self._turbo_scroll.pack(fill="both", expand=True, pady=(0, 0))
+
+        if self._turbo_queue:
+            for item in self._turbo_queue:
+                self._turbo_add_row_ui(item)
+        else:
+            self._turbo_empty_lbl = ctk.CTkLabel(self._turbo_scroll,
+                                                  text="Ajoutez des fichiers audio ou glissez-déposez ici.",
+                                                  text_color=MUTED, font=FONT_SM)
+            self._turbo_empty_lbl.pack(pady=40)
+
+        # Barre inférieure : bouton "Ouvrir dossier" visible dès qu'un item est ✅
+        self._turbo_bottom_bar = ctk.CTkFrame(outer, fg_color="transparent")
+        self._turbo_bottom_bar.pack(fill="x", pady=(6, 0))
+        if any(it["status"].startswith("✅") for it in self._turbo_queue):
+            self._turbo_show_open_folder_btn()
+
+    def _turbo_show_open_folder_btn(self):
+        bar = getattr(self, "_turbo_bottom_bar", None)
+        if not bar:
+            return
+        try:
+            if not bar.winfo_exists():
+                return
+        except Exception:
+            return
+        for w in bar.winfo_children():
+            try: w.destroy()
+            except Exception: pass
+        _btn(bar, "📂  Ouvrir le dossier de sortie",
+             lambda: open_file(self.project_root),
+             height=34, width=230).pack(side="left")
+
+    def _turbo_pick_image(self):
+        path = filedialog.askopenfilename(
+            filetypes=[("Images", "*.png *.jpg *.jpeg *.webp *.bmp"), ("Tous", "*.*")])
+        if path:
+            self._turbo_image = path
+            if hasattr(self, "_turbo_img_var"):
+                self._turbo_img_var.set(Path(path).name)
+
+    def _turbo_pick_files(self):
+        paths = filedialog.askopenfilenames(
+            filetypes=[("Audio", "*.mp3 *.wav *.flac *.ogg *.m4a *.aac *.wma"), ("Tous", "*.*")])
+        if paths:
+            self._turbo_add_paths(list(paths))
+
+    def _turbo_add_paths(self, paths: list[str]):
+        added = 0
+        for p in paths:
+            ext = Path(p).suffix.lower()
+            if ext not in AUDIO_EXTS:
+                continue
+            stem = Path(p).stem
+            if " - " in stem:
+                left, right = stem.split(" - ", 1)
+                artist_val, title_val = left.strip(), right.strip()
+            else:
+                artist_val, title_val = "", stem.strip()
+            item = {
+                "audio":      p,
+                "image":      "",          # vide = utilise la pochette commune
+                "artist_var": tk.StringVar(value=artist_val),
+                "title_var":  tk.StringVar(value=title_val),
+                "status":     "⏳ En attente",
+                "_status_lbl": None,
+                "_img_btn":    None,
+            }
+            self._turbo_queue.append(item)
+            if self._turbo_view_active and hasattr(self, "_turbo_scroll"):
+                # Supprimer le label "vide" si présent
+                if hasattr(self, "_turbo_empty_lbl") and self._turbo_empty_lbl:
+                    try:
+                        self._turbo_empty_lbl.destroy()
+                    except Exception:
+                        pass
+                    self._turbo_empty_lbl = None
+                self._turbo_add_row_ui(item)
+            added += 1
+        if added:
+            self._set_status(f"⚡ Turbo — {len(self._turbo_queue)} fichier(s)")
+
+    def _turbo_add_row_ui(self, item: dict):
+        row = ctk.CTkFrame(self._turbo_scroll, fg_color=SURF2, corner_radius=6)
+        row.pack(fill="x", pady=2)
+        item["_row_frame"] = row
+
+        fname = Path(item["audio"]).name
+        fname_short = fname[:25] + "…" if len(fname) > 25 else fname
+        ctk.CTkLabel(row, text=fname_short, text_color=TEXT, font=FONT_MU,
+                     width=168, anchor="w").pack(side="left", padx=6, pady=6)
+
+        # Bouton pochette individuelle — gris = commune, amber = propre
+        has_img = bool(item.get("image"))
+
+        def _pick_item_img(it=item):
+            path = filedialog.askopenfilename(
+                filetypes=[("Images", "*.png *.jpg *.jpeg *.webp *.bmp"), ("Tous", "*.*")])
+            if path:
+                it["image"] = path
+                b = it.get("_img_btn")
+                if b:
+                    try:
+                        b.configure(fg_color="#d97706", hover_color="#b45309", text_color="#fff8e7")
+                    except Exception:
+                        pass
+            elif it.get("image"):
+                # Clic annulé sur une image déjà choisie → proposer de réinitialiser
+                pass
+
+        img_btn = _btn(row, "🖼", _pick_item_img, small=True, width=46, height=26,
+                       fg_color="#d97706" if has_img else SURF3,
+                       hover_color="#b45309" if has_img else BORDER)
+        img_btn.pack(side="left", padx=(0, 4), pady=6)
+        item["_img_btn"] = img_btn
+
+        ctk.CTkEntry(row, textvariable=item["artist_var"],
+                     placeholder_text="Artiste",
+                     fg_color=SURF3, border_color=BORDER, text_color=TEXT,
+                     font=FONT_MU, width=136).pack(side="left", padx=(0, 4), pady=6)
+
+        ctk.CTkEntry(row, textvariable=item["title_var"],
+                     placeholder_text="Titre",
+                     fg_color=SURF3, border_color=BORDER, text_color=TEXT,
+                     font=FONT_MU, width=166).pack(side="left", padx=(0, 4), pady=6)
+
+        status_lbl = ctk.CTkLabel(row, text=item["status"], text_color=MUTED,
+                                   font=FONT_MU, width=86, anchor="w")
+        status_lbl.pack(side="left", padx=4)
+        item["_status_lbl"] = status_lbl
+
+        _btn(row, "✕", lambda it=item: self._turbo_remove_row(it),
+             small=True, width=30, height=26, danger=True).pack(side="right", padx=(0, 6))
+
+    def _turbo_remove_row(self, item: dict):
+        if item.get("status", "").startswith("⚙️"):
+            return  # ne pas supprimer un item en cours
+        self._turbo_queue.remove(item)
+        frame = item.get("_row_frame")
+        if frame:
+            try:
+                frame.destroy()
+            except Exception:
+                pass
+        if not self._turbo_queue and self._turbo_view_active and hasattr(self, "_turbo_scroll"):
+            self._turbo_empty_lbl = ctk.CTkLabel(self._turbo_scroll,
+                                                  text="Ajoutez des fichiers audio ou glissez-déposez ici.",
+                                                  text_color=MUTED, font=FONT_SM)
+            self._turbo_empty_lbl.pack(pady=40)
+
+    def _turbo_refresh_status_ui(self, item: dict):
+        lbl = item.get("_status_lbl")
+        if not lbl:
+            return
+        try:
+            if lbl.winfo_exists():
+                status = item["status"]
+                color = MUTED
+                if status.startswith("✅"):
+                    color = SUCCESS
+                elif status.startswith("❌"):
+                    color = DANGER
+                elif status.startswith("⚙️"):
+                    color = WARN
+                lbl.configure(text=status, text_color=color)
+        except Exception:
+            pass
+
+    def _turbo_start(self):
+        if self._turbo_running:
+            return
+        if not self._turbo_queue:
+            messagebox.showwarning("Turbo", "Aucun fichier dans la file.")
+            return
+        # Vérifier que chaque ligne a une pochette (individuelle ou commune)
+        shared_ok = bool(self._turbo_image) and Path(self._turbo_image).exists()
+        missing_idx = [
+            i + 1 for i, it in enumerate(self._turbo_queue)
+            if not it.get("status", "").startswith("✅")
+            and not (it.get("image") and Path(it["image"]).exists())
+            and not shared_ok
+        ]
+        if missing_idx:
+            messagebox.showwarning(
+                "Turbo",
+                f"Pochette manquante pour la ligne {missing_idx[0]}.\n"
+                "Définissez une pochette commune (en haut) ou cliquez sur 🖼 par ligne."
+            )
+            return
+        preset_name = self._turbo_preset_var.get()
+        if preset_name not in self.user_presets:
+            messagebox.showwarning("Turbo", "Preset introuvable. Créez et étoilez un preset d'abord.")
+            return
+        preset_data = self.user_presets[preset_name]
+        mode        = self._turbo_format_var.get()
+
+        self._turbo_stop   = False
+        self._turbo_running = True
+        self._set_status("⚡ Turbo en cours...", WARN)
+
+        def worker():
+            self._turbo_worker(preset_data, mode)
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _turbo_stop_fn(self):
+        self._turbo_stop = True
+        self._set_status("⚡ Turbo — arrêt après le fichier en cours…", WARN)
+
+    def _turbo_worker(self, preset_data: dict, mode: str):
+        for item in self._turbo_queue:
+            if self._turbo_stop:
+                break
+            if item["status"].startswith("✅"):
+                continue
+
+            item["status"] = "⚙️ En cours"
+            self.after(0, self._turbo_refresh_status_ui, item)
+
+            try:
+                artist = item["artist_var"].get().strip()
+                title  = item["title_var"].get().strip()
+                proj_raw = f"{artist} - {title}" if artist else (title or "turbo_export")
+                proj_name = safe_name(proj_raw) or "turbo_export"
+
+                is_short = (mode == "SHORT")
+                suffix   = "_SHORT" if is_short else ""
+                root = Path(self.project_root)
+                root.mkdir(parents=True, exist_ok=True)
+                folder_name = f"{proj_name}{suffix}"
+                proj_dir = root / folder_name
+                ctr = 2
+                while proj_dir.exists():
+                    proj_dir = root / f"{folder_name}_{ctr}"
+                    ctr += 1
+                proj_dir.mkdir(parents=True, exist_ok=True)
+
+                audio_src = Path(item["audio"])
+                # Pochette individuelle si définie, sinon pochette commune
+                image_src = Path(item["image"] if item.get("image") else self._turbo_image)
+                audio_dst = proj_dir / f"{proj_name}{audio_src.suffix.lower()}"
+                image_dst = proj_dir / f"{proj_name}_cover{image_src.suffix.lower()}"
+                shutil.copy2(str(audio_src), str(audio_dst))
+                shutil.copy2(str(image_src), str(image_dst))
+                output_path = str(proj_dir / f"{proj_name}{suffix}.mp4")
+
+                settings = self._render_settings_for_turbo(
+                    item, preset_data, mode, str(audio_dst), str(image_dst), output_path
+                )
+
+                def progress_cb(text, it=item):
+                    m = re.search(r"(\d+(?:\.\d+)?)%", text)
+                    it["status"] = f"⚙️ {int(float(m.group(1)))}%" if m else "⚙️ En cours"
+                    self.after(0, self._turbo_refresh_status_ui, it)
+
+                render_video(settings, progress_callback=progress_cb)
+
+                self.history.append({
+                    "name":       proj_name + suffix,
+                    "folder":     str(proj_dir),
+                    "video":      output_path,
+                    "audio":      str(audio_dst),
+                    "image":      str(image_dst),
+                    "type":       mode.lower(),
+                    "created_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+                })
+                self.after(0, self._persist_now)
+
+                item["status"] = "✅ Fait"
+                self.after(0, self._turbo_refresh_status_ui, item)
+
+            except Exception as exc:
+                item["status"] = f"❌ {str(exc)[:22]}"
+                self.after(0, self._turbo_refresh_status_ui, item)
+
+        self._turbo_running = False
+        self.after(0, self._turbo_on_done)
+
+    def _turbo_on_done(self):
+        n_ok  = sum(1 for it in self._turbo_queue if it["status"].startswith("✅"))
+        n_err = sum(1 for it in self._turbo_queue if it["status"].startswith("❌"))
+        msg = f"⚡ Turbo terminé — {n_ok} vidéo(s)"
+        if n_err:
+            msg += f", {n_err} erreur(s)"
+        self._set_status(msg, SUCCESS if not n_err else WARN)
+        if n_ok:
+            self._turbo_show_open_folder_btn()
+
+    def _render_settings_for_turbo(self, item: dict, preset_data: dict, mode: str,
+                                    audio_path: str, image_path: str, output_path: str):
+        from app.presets import SHORT_WIDTH, SHORT_HEIGHT
+        is_short = (mode == "SHORT")
+        out_w = SHORT_WIDTH if is_short else 1920
+        out_h = SHORT_HEIGHT if is_short else 1080
+        duration_limit = 15.0 if mode == "CHECK" else (60.0 if is_short else None)
+
+        return RenderSettings(
+            audio_path=audio_path,
+            image_path=image_path,
+            output_path=output_path,
+            title_text=item["title_var"].get().strip(),
+            artist_text=item["artist_var"].get().strip(),
+            duration_limit=duration_limit,
+            start_offset=0.0,
+            particle_preset=preset_data.get("particle_preset", "Premium"),
+            smoke_preset=preset_data.get("smoke_preset", "Cinématique"),
+            smoke_color=preset_data.get("smoke_color", "Blanc"),
+            spectrum_style=preset_data.get("spectrum_style", "Cercle radial"),
+            spectrum_size=float(preset_data.get("spectrum_size", 1.05)),
+            spectrum_y=float(preset_data.get("spectrum_y", 0.90)),
+            image_zoom=float(preset_data.get("image_zoom", 1.00)),
+            pulse_strength=float(preset_data.get("pulse_strength", 1.10)),
+            background_blur=38,
+            output_width=out_w,
+            output_height=out_h,
+            bg_mode=preset_data.get("bg_mode", "photo"),
+            gradient_top=preset_data.get("gradient_top", "#1a1a2e"),
+            gradient_bottom=preset_data.get("gradient_bottom", "#0f3460"),
+            vinyl_mode=bool(preset_data.get("vinyl_mode", False)),
+            vinyl_black=bool(preset_data.get("vinyl_black", False)),
+            spectrum_color=preset_data.get("spectrum_color", "#ffffff"),
+            spectrum_color_auto=bool(preset_data.get("spectrum_color_auto", False)),
+            floating_bg=bool(preset_data.get("floating_bg", False)),
+            spectrum_color_mid=preset_data.get("spectrum_color_mid", "#ffffff"),
+            spectrum_color_high=preset_data.get("spectrum_color_high", "#ffffff"),
+            spectrum_tricolor=bool(preset_data.get("spectrum_tricolor", False)),
+            spectrum_reactive=bool(preset_data.get("spectrum_reactive", False)),
+            font_name=self.font_name.get(),
+            font_size_scale=float(self.font_size_scale.get()),
+            subtitle_text="",
+            shadow_intensity=float(self.shadow_intensity.get()),
+            shadow_color=self.shadow_color,
+            shadow_offset_x=float(self.shadow_offset_x.get()),
+            shadow_offset_y=float(self.shadow_offset_y.get()),
+            text_x=float(self.text_x.get()),
+            text_y=float(self.text_y.get()),
+        )
+
+    # ── Éditeur ───────────────────────────────────────────────────────────────
+
+    # ── 🎛️ Presets ───────────────────────────────────────────────────────────
+
+    def show_presets(self):
+        self._clear_main()
+        self._set_status("🎛️ Presets")
+
+        outer = ctk.CTkFrame(self.main, fg_color=BG)
+        outer.pack(fill="both", expand=True, padx=32, pady=24)
+
+        # En-tête
+        top = ctk.CTkFrame(outer, fg_color="transparent")
+        top.pack(fill="x", pady=(0, 16))
+        ctk.CTkLabel(top, text="🎛️ Presets", font=FONT_H1, text_color=TEXT).pack(side="left")
+        _btn(top, "← Accueil", self.show_home, small=True, width=120).pack(side="right")
+
+        # Deux panneaux côte à côte
+        content = ctk.CTkFrame(outer, fg_color="transparent")
+        content.pack(fill="both", expand=True)
+
+        # Panneau gauche — liste scrollable
+        left_wrap = ctk.CTkFrame(content, fg_color=SURF2, corner_radius=10,
+                                  border_color=BORDER, border_width=1, width=340)
+        left_wrap.pack(side="left", fill="y", padx=(0, 12))
+        left_wrap.pack_propagate(False)
+        self._presets_left_scroll = ctk.CTkScrollableFrame(left_wrap, fg_color="transparent",
+                                                            scrollbar_button_color=SURF3)
+        self._presets_left_scroll.pack(fill="both", expand=True, padx=6, pady=6)
+
+        # Panneau droit — éditeur
+        self._presets_right_scroll = ctk.CTkScrollableFrame(content, fg_color="transparent",
+                                                              scrollbar_button_color=SURF3)
+        self._presets_right_scroll.pack(side="left", fill="both", expand=True)
+
+        self._presets_refresh_list()
+        self._presets_show_placeholder()
+
+    def _presets_refresh_list(self):
+        if not hasattr(self, "_presets_left_scroll"):
+            return
+        scroll = self._presets_left_scroll
+        try:
+            if not scroll.winfo_exists():
+                return
+        except Exception:
+            return
+        for w in scroll.winfo_children():
+            try: w.destroy()
+            except Exception: pass
+
+        # ── Presets intégrés ─────────────────────────────────────────────────
+        ctk.CTkLabel(scroll, text="Presets intégrés", text_color=ACCLT,
+                     font=FONT_SEC, anchor="w").pack(anchor="w", pady=(4, 4))
+        for name in GLOBAL_PRESETS:
+            row = ctk.CTkFrame(scroll, fg_color=SURF3, corner_radius=6)
+            row.pack(fill="x", pady=2)
+            ctk.CTkLabel(row, text=name, text_color=MUTED, font=FONT_SM,
+                         anchor="w").pack(side="left", padx=10, pady=6, fill="x", expand=True)
+            _btn(row, "▶", lambda n=name: self._apply_global_preset_by_name(n),
+                 small=True, width=30, height=26, accent=True).pack(side="right", padx=(0, 6))
+
+        _sep(scroll)
+
+        # ── Mes presets ───────────────────────────────────────────────────────
+        ctk.CTkLabel(scroll, text="Mes presets", text_color=ACCLT,
+                     font=FONT_SEC, anchor="w").pack(anchor="w", pady=(8, 4))
+        if not self.user_presets:
+            ctk.CTkLabel(scroll, text="Aucun preset — créez-en un ci-dessous",
+                         text_color=MUTED, font=FONT_MU).pack(pady=8)
+        else:
+            for name, data in list(self.user_presets.items()):
+                is_fav = name in self.user_preset_favorites
+                row = ctk.CTkFrame(scroll, fg_color=SURF3, corner_radius=6)
+                row.pack(fill="x", pady=2)
+                _btn(row, "★", lambda n=name: self._toggle_favorite(n),
+                     small=True, width=28, height=26,
+                     fg_color="#d97706" if is_fav else SURF2,
+                     hover_color="#b45309").pack(side="left", padx=(4, 0))
+                ctk.CTkLabel(row, text=name, text_color=TEXT, font=FONT_SM,
+                             anchor="w").pack(side="left", padx=8, pady=6, fill="x", expand=True)
+                _btn(row, "✏️", lambda n=name, d=data: self._presets_show_editor(d.copy(), n),
+                     small=True, width=30, height=26).pack(side="right", padx=(0, 4))
+                _btn(row, "🗑", lambda n=name: self._presets_delete(n),
+                     small=True, width=30, height=26, danger=True).pack(side="right", padx=(0, 4))
+
+        _sep(scroll)
+        _btn(scroll, "＋  Nouveau preset", lambda: self._presets_show_editor(None, ""),
+             accent=True, height=34).pack(fill="x", pady=(8, 4))
+
+    def _presets_show_placeholder(self):
+        right = getattr(self, "_presets_right_scroll", None)
+        if not right:
+            return
+        try:
+            if not right.winfo_exists():
+                return
+        except Exception:
+            return
+        for w in right.winfo_children():
+            try: w.destroy()
+            except Exception: pass
+        ctk.CTkLabel(right,
+                     text="← Sélectionnez un preset à modifier\n   ou créez-en un nouveau.",
+                     text_color=MUTED, font=FONT_SM, justify="left").pack(pady=60, padx=20, anchor="w")
+
+    def _presets_show_editor(self, preset_data: dict | None, preset_name: str):
+        right = getattr(self, "_presets_right_scroll", None)
+        if not right:
+            return
+        try:
+            if not right.winfo_exists():
+                return
+        except Exception:
+            return
+        for w in right.winfo_children():
+            try: w.destroy()
+            except Exception: pass
+
+        is_new = preset_data is None
+        data   = preset_data if preset_data is not None else {}
+
+        title_txt = "Nouveau preset" if is_new else f"Modifier : {preset_name}"
+        ctk.CTkLabel(right, text=title_txt, font=FONT_H1, text_color=TEXT,
+                     anchor="w").pack(anchor="w", pady=(4, 14))
+
+        # Variables locales du formulaire
+        _p_name   = tk.StringVar(value="" if is_new else preset_name)
+        _p_spec   = tk.StringVar(value=data.get("spectrum_style", "Cercle radial"))
+        _p_parts  = tk.StringVar(value=data.get("particle_preset", "Premium"))
+        _p_smoke  = tk.StringVar(value=data.get("smoke_preset", "Cinématique"))
+        _p_sc_col = tk.StringVar(value=data.get("smoke_color", "Blanc"))
+        _p_vinyl  = tk.BooleanVar(value=bool(data.get("vinyl_mode", False)))
+        _p_vblk   = tk.BooleanVar(value=bool(data.get("vinyl_black", False)))
+        _p_float  = tk.BooleanVar(value=bool(data.get("floating_bg", False)))
+        _p_bgmode = tk.StringVar(value=data.get("bg_mode", "photo"))
+        _p_react  = tk.BooleanVar(value=bool(data.get("spectrum_reactive", False)))
+        _p_fav    = tk.BooleanVar(value=preset_name in self.user_preset_favorites)
+        _sc = [data.get("spectrum_color", "#ffffff")]
+
+        # Nom
+        ctk.CTkLabel(right, text="Nom du preset", text_color=MUTED, font=FONT_MU, anchor="w").pack(anchor="w")
+        ctk.CTkEntry(right, textvariable=_p_name, placeholder_text="Nom unique du preset",
+                     fg_color=SURF3, border_color=BORDER, text_color=TEXT,
+                     font=FONT_SM).pack(fill="x", pady=(2, 10))
+
+        _sep(right)
+
+        # Spectre
+        ctk.CTkLabel(right, text="Style de spectre", text_color=MUTED, font=FONT_MU, anchor="w").pack(anchor="w", pady=(8, 2))
+        ctk.CTkComboBox(right, variable=_p_spec, values=SPECTRUM_STYLES,
+                        fg_color=SURF3, border_color=BORDER, button_color=SURF2,
+                        button_hover_color=BORDER, dropdown_fg_color=SURF2,
+                        text_color=TEXT, font=FONT_SM).pack(fill="x", pady=(0, 8))
+
+        # Couleur spectre
+        sc_row = ctk.CTkFrame(right, fg_color="transparent")
+        sc_row.pack(fill="x", pady=(0, 8))
+        ctk.CTkLabel(sc_row, text="Couleur spectre", text_color=MUTED, font=FONT_MU,
+                     anchor="w").pack(side="left", fill="x", expand=True)
+        _sc_swatch = tk.Label(sc_row, bg=_sc[0], width=3, relief="flat")
+        _sc_swatch.pack(side="right", padx=(4, 0))
+        _sc_hex = ctk.CTkLabel(sc_row, text=_sc[0], text_color=TEXT, font=FONT_MU, width=65, anchor="e")
+        _sc_hex.pack(side="right")
+        def _pick_sc():
+            res = colorchooser.askcolor(color=_sc[0], title="Couleur du spectre")
+            if res and res[1]:
+                _sc[0] = res[1]
+                try: _sc_swatch.configure(bg=res[1])
+                except Exception: pass
+                try: _sc_hex.configure(text=res[1])
+                except Exception: pass
+        _btn(sc_row, "Choisir", _pick_sc, small=True, width=70, height=24).pack(side="right", padx=(0, 6))
+
+        # Flash beats
+        react_row = ctk.CTkFrame(right, fg_color="transparent")
+        react_row.pack(fill="x", pady=(0, 8))
+        ctk.CTkLabel(react_row, text="Flash beats", text_color=TEXT, font=FONT_H2, anchor="w").pack(side="left")
+        ctk.CTkSwitch(react_row, text="", variable=_p_react,
+                      progress_color=ACCENT, button_color=ACCLT,
+                      button_hover_color=ACCENT, width=44, height=22).pack(side="right")
+
+        _sep(right)
+
+        # Ambiance
+        ctk.CTkLabel(right, text="Ambiance (fumée)", text_color=MUTED, font=FONT_MU, anchor="w").pack(anchor="w", pady=(8, 2))
+        ctk.CTkComboBox(right, variable=_p_smoke, values=list(SMOKE_PRESETS.keys()),
+                        fg_color=SURF3, border_color=BORDER, button_color=SURF2,
+                        button_hover_color=BORDER, dropdown_fg_color=SURF2,
+                        text_color=TEXT, font=FONT_SM).pack(fill="x", pady=(0, 6))
+        ctk.CTkLabel(right, text="Couleur fumée", text_color=MUTED, font=FONT_MU, anchor="w").pack(anchor="w", pady=(0, 2))
+        ctk.CTkComboBox(right, variable=_p_sc_col, values=list(SMOKE_COLORS.keys()),
+                        fg_color=SURF3, border_color=BORDER, button_color=SURF2,
+                        button_hover_color=BORDER, dropdown_fg_color=SURF2,
+                        text_color=TEXT, font=FONT_SM).pack(fill="x", pady=(0, 6))
+        ctk.CTkLabel(right, text="Particules", text_color=MUTED, font=FONT_MU, anchor="w").pack(anchor="w", pady=(0, 2))
+        ctk.CTkComboBox(right, variable=_p_parts, values=list(PARTICLE_PRESETS.keys()),
+                        fg_color=SURF3, border_color=BORDER, button_color=SURF2,
+                        button_hover_color=BORDER, dropdown_fg_color=SURF2,
+                        text_color=TEXT, font=FONT_SM).pack(fill="x", pady=(0, 8))
+
+        _sep(right)
+
+        # Vinyle
+        vr = ctk.CTkFrame(right, fg_color="transparent")
+        vr.pack(fill="x", pady=(8, 4))
+        ctk.CTkLabel(vr, text="🎵  Disque vinyle", text_color=TEXT, font=FONT_H2, anchor="w").pack(side="left")
+        ctk.CTkSwitch(vr, text="", variable=_p_vinyl,
+                      progress_color=ACCENT, button_color=ACCLT,
+                      button_hover_color=ACCENT, width=44, height=22).pack(side="right")
+        vt = ctk.CTkFrame(right, fg_color="transparent")
+        vt.pack(fill="x", pady=(0, 8))
+        for val, lbl in [(False, "🖼 Image"), (True, "⚫ Noir classique")]:
+            ctk.CTkRadioButton(vt, text=lbl, variable=_p_vblk, value=val,
+                               fg_color=ACCENT, hover_color=ACCHOV,
+                               text_color=TEXT, font=FONT_SM).pack(side="left", padx=(0, 14))
+
+        _sep(right)
+
+        # Fond
+        fr = ctk.CTkFrame(right, fg_color="transparent")
+        fr.pack(fill="x", pady=(8, 4))
+        ctk.CTkLabel(fr, text="🌊  Fond flottant", text_color=TEXT, font=FONT_H2, anchor="w").pack(side="left")
+        ctk.CTkSwitch(fr, text="", variable=_p_float,
+                      progress_color=ACCENT, button_color=ACCLT,
+                      button_hover_color=ACCENT, width=44, height=22).pack(side="right")
+        ctk.CTkLabel(right, text="Type de fond", text_color=MUTED, font=FONT_MU, anchor="w").pack(anchor="w", pady=(4, 2))
+        bg_row = ctk.CTkFrame(right, fg_color="transparent")
+        bg_row.pack(fill="x", pady=(0, 8))
+        for val, label in [("photo", "📷 Photo floue"), ("gradient", "🌈 Dégradé")]:
+            ctk.CTkRadioButton(bg_row, text=label, variable=_p_bgmode, value=val,
+                               fg_color=ACCENT, hover_color=ACCHOV,
+                               text_color=TEXT, font=FONT_SM).pack(side="left", padx=(0, 14))
+
+        _sep(right)
+
+        # Favori
+        fav_row = ctk.CTkFrame(right, fg_color="transparent")
+        fav_row.pack(fill="x", pady=(8, 12))
+        ctk.CTkLabel(fav_row, text="Favori ★", text_color=TEXT, font=FONT_H2, anchor="w").pack(side="left")
+        ctk.CTkSwitch(fav_row, text="", variable=_p_fav,
+                      progress_color="#d97706", button_color="#f59e0b",
+                      button_hover_color="#d97706", width=44, height=22).pack(side="right")
+
+        # Boutons action
+        btn_row = ctk.CTkFrame(right, fg_color="transparent")
+        btn_row.pack(fill="x", pady=(0, 24))
+
+        def _do_save():
+            name = _p_name.get().strip()
+            if not name:
+                return
+            saved = dict(data)
+            saved.update({
+                "particle_preset":     _p_parts.get(),
+                "smoke_preset":        _p_smoke.get(),
+                "smoke_color":         _p_sc_col.get(),
+                "spectrum_style":      _p_spec.get(),
+                "spectrum_size":       float(data.get("spectrum_size", 1.05)),
+                "spectrum_y":          float(data.get("spectrum_y", 0.90)),
+                "image_zoom":          float(data.get("image_zoom", 1.00)),
+                "pulse_strength":      float(data.get("pulse_strength", 1.10)),
+                "vinyl_mode":          bool(_p_vinyl.get()),
+                "vinyl_black":         bool(_p_vblk.get()),
+                "spectrum_color":      _sc[0],
+                "spectrum_color_auto": False,
+                "floating_bg":         bool(_p_float.get()),
+                "bg_mode":             _p_bgmode.get(),
+                "gradient_top":        data.get("gradient_top", "#1a1a2e"),
+                "gradient_bottom":     data.get("gradient_bottom", "#0f3460"),
+                "spectrum_reactive":   bool(_p_react.get()),
+            })
+            self.user_presets[name] = saved
+            if bool(_p_fav.get()):
+                self.user_preset_favorites.add(name)
+            else:
+                self.user_preset_favorites.discard(name)
+            self._persist_now()
+            self._refresh_user_presets_ui()
+            self._presets_refresh_list()
+            self._presets_show_placeholder()
+
+        _btn(btn_row, "💾  Sauvegarder", _do_save, accent=True, height=36, width=160).pack(side="left")
+        _btn(btn_row, "Annuler", self._presets_show_placeholder, height=36, width=100).pack(side="left", padx=(8, 0))
+
+    def _presets_delete(self, name: str):
+        if not messagebox.askyesno("Presets", f"Supprimer le preset « {name} » ?"):
+            return
+        self.user_presets.pop(name, None)
+        self.user_preset_favorites.discard(name)
+        self._persist_now()
+        self._refresh_user_presets_ui()
+        self._presets_refresh_list()
+        self._presets_show_placeholder()
+
+    def _apply_global_preset_by_name(self, name: str):
+        if name not in GLOBAL_PRESETS:
+            return
+        self.global_preset.set(name)
+        self._apply_global_preset()
+
     # ── Éditeur ───────────────────────────────────────────────────────────────
 
     def show_editor(self):
@@ -1042,6 +1812,50 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
         # ── ⚡ Presets ────────────────────────────────────────────────────────────
         tp = mkscroll("⚡")
 
+        # ── Test rapide ───────────────────────────────────────────────────────
+        ctk.CTkLabel(tp, text="Test rapide (CHECK · 15 s)", text_color=MUTED,
+                     font=FONT_MU, anchor="w").pack(anchor="w", pady=(8, 4))
+
+        ctk.CTkLabel(tp, text="Audio", text_color=MUTED, font=FONT_MU,
+                     anchor="w").pack(anchor="w", pady=(0, 2))
+        _tarow = ctk.CTkFrame(tp, fg_color="transparent")
+        _tarow.pack(fill="x", pady=(0, 4))
+        self._test_audio_lbl = ctk.CTkLabel(
+            _tarow,
+            text=Path(self.test_audio_path).name if self.test_audio_path else "— aucun fichier —",
+            text_color=TEXT if self.test_audio_path else MUTED,
+            font=FONT_MU, anchor="w", wraplength=185)
+        self._test_audio_lbl.pack(side="left", fill="x", expand=True)
+        _btn(_tarow, "...", self._pick_test_audio, small=True, width=32, height=26).pack(side="right")
+
+        ctk.CTkLabel(tp, text="Pochette", text_color=MUTED, font=FONT_MU,
+                     anchor="w").pack(anchor="w", pady=(0, 2))
+        _tirow = ctk.CTkFrame(tp, fg_color="transparent")
+        _tirow.pack(fill="x", pady=(0, 8))
+        self._test_image_lbl = ctk.CTkLabel(
+            _tirow,
+            text=Path(self.test_image_path).name if self.test_image_path else "— aucune image —",
+            text_color=TEXT if self.test_image_path else MUTED,
+            font=FONT_MU, anchor="w", wraplength=185)
+        self._test_image_lbl.pack(side="left", fill="x", expand=True)
+        _btn(_tirow, "...", self._pick_test_image, small=True, width=32, height=26).pack(side="right")
+
+        self._test_btn = _btn(tp, "▶  Tester", self._start_test_export,
+                              accent=True, height=36, small=True)
+        self._test_btn.pack(fill="x", pady=(0, 6))
+        self._test_bar = ctk.CTkProgressBar(tp, progress_color=WARN, fg_color=SURF3)
+        self._test_bar.set(0)
+        self._test_bar.pack(fill="x", pady=(0, 4))
+        self._test_bar.pack_forget()
+        self._test_detail = ctk.CTkLabel(tp, text="", text_color=MUTED,
+                                         font=FONT_MU, anchor="w")
+        self._test_detail.pack(anchor="w")
+        self._test_detail.pack_forget()
+        self._test_open_btn = _btn(tp, "📂  Ouvrir", lambda: None, small=True, height=30)
+        self._test_open_btn.pack(fill="x", pady=(0, 4))
+        self._test_open_btn.pack_forget()
+        _sep(tp)
+
         ctk.CTkLabel(tp, text="Presets intégrés", text_color=MUTED, font=FONT_MU, anchor="w").pack(anchor="w", pady=(8, 2))
         ctk.CTkComboBox(tp, variable=self.global_preset,
                         values=list(GLOBAL_PRESETS.keys()),
@@ -1094,7 +1908,14 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
                                fg_color=ACCENT, hover_color=ACCHOV,
                                text_color=TEXT, font=FONT_SM).pack(side="left", padx=(0, 14))
         _sep(ta)
-        ctk.CTkLabel(ta, text="Artiste", text_color=MUTED, font=FONT_MU, anchor="w").pack(anchor="w", pady=(8, 2))
+        tx_hdr = ctk.CTkFrame(ta, fg_color="transparent")
+        tx_hdr.pack(fill="x", pady=(10, 4))
+        ctk.CTkLabel(tx_hdr, text="📝  Texte", text_color=TEXT, font=FONT_H2, anchor="w").pack(side="left")
+        ctk.CTkSwitch(tx_hdr, text="Afficher", variable=self.show_text,
+                      command=self._on_setting_changed,
+                      progress_color=ACCENT, button_color=ACCLT,
+                      button_hover_color=ACCENT, width=44, height=22).pack(side="right")
+        ctk.CTkLabel(ta, text="Artiste", text_color=MUTED, font=FONT_MU, anchor="w").pack(anchor="w", pady=(4, 2))
         ctk.CTkEntry(ta, textvariable=self.artist_text,
                      placeholder_text="Artiste (optionnel)",
                      fg_color=SURF3, border_color=BORDER, text_color=TEXT,
@@ -1104,9 +1925,14 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
                      placeholder_text="Titre (optionnel)",
                      fg_color=SURF3, border_color=BORDER, text_color=TEXT,
                      font=FONT_SM).pack(fill="x", pady=(2, 4))
+        ctk.CTkLabel(ta, text="Sous-titre", text_color=MUTED, font=FONT_MU, anchor="w").pack(anchor="w")
+        ctk.CTkEntry(ta, textvariable=self.subtitle_text,
+                     placeholder_text="Sous-titre (optionnel)",
+                     fg_color=SURF3, border_color=BORDER, text_color=TEXT,
+                     font=FONT_SM).pack(fill="x", pady=(2, 4))
         self._text_preview_lbl = ctk.CTkLabel(ta, text="", text_color=ACCLT, font=FONT_MU, anchor="w")
         self._text_preview_lbl.pack(anchor="w", pady=(0, 2))
-        # Stocker les ids pour pouvoir supprimer les traces plus tard
+        # Supprimer les anciennes traces avant re-création
         if hasattr(self, "_text_trace_ids"):
             for var, tid in self._text_trace_ids:
                 try: var.trace_remove("write", tid)
@@ -1114,13 +1940,17 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
         def _on_text_change(*_):
             self._update_text_preview()
             self._auto_fill_project_name()
+        def _on_subtitle_change(*_):
+            self._update_text_preview()
+            self._schedule_persist()
         tid1 = self.artist_text.trace_add("write", _on_text_change)
         tid2 = self.title_text.trace_add("write",  _on_text_change)
-        self._text_trace_ids = [(self.artist_text, tid1), (self.title_text, tid2)]
+        tid3 = self.subtitle_text.trace_add("write", _on_subtitle_change)
+        self._text_trace_ids = [(self.artist_text, tid1), (self.title_text, tid2), (self.subtitle_text, tid3)]
         self._update_text_preview()
         _sep(ta)
 
-        # Sélection de police
+        # Sélection de police + taille
         ctk.CTkLabel(ta, text="Police", text_color=MUTED, font=FONT_MU, anchor="w").pack(anchor="w", pady=(8, 2))
         font_names = get_font_names()
         ctk.CTkComboBox(ta, variable=self.font_name,
@@ -1130,7 +1960,24 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
                         button_color=SURF2, button_hover_color=BORDER,
                         dropdown_fg_color=SURF2, text_color=TEXT,
                         font=FONT_SM).pack(fill="x", pady=(0, 6))
+        self._slider_row(ta, "Taille texte", self.font_size_scale, 0.5, 2.0)
         _sep(ta)
+
+        # Ombre du texte
+        ctk.CTkLabel(ta, text="Ombre du texte", text_color=TEXT, font=FONT_H2, anchor="w").pack(anchor="w", pady=(8, 2))
+        self._slider_row(ta, "Intensité", self.shadow_intensity, 0.0, 1.0)
+        _sh_row = ctk.CTkFrame(ta, fg_color="transparent")
+        _sh_row.pack(fill="x", pady=(4, 2))
+        ctk.CTkLabel(_sh_row, text="Couleur", text_color=MUTED, font=FONT_MU, anchor="w").pack(side="left")
+        self._shadow_swatch = tk.Label(_sh_row, bg=self.shadow_color, width=3, relief="flat")
+        self._shadow_swatch.pack(side="right", padx=(4, 0))
+        self._shadow_hex_lbl = ctk.CTkLabel(_sh_row, text=self.shadow_color, text_color=TEXT, font=FONT_MU, width=65, anchor="e")
+        self._shadow_hex_lbl.pack(side="right")
+        _btn(_sh_row, "Choisir", self._pick_shadow_color, small=True, width=70, height=24).pack(side="right", padx=(0, 6))
+        self._slider_row(ta, "Décalage X", self.shadow_offset_x, 0.0, 20.0)
+        self._slider_row(ta, "Décalage Y", self.shadow_offset_y, 0.0, 20.0)
+        _sep(ta)
+
         self._slider_row(ta, "Texte X", self.text_x, 0.05, 0.95)
         self._slider_row(ta, "Texte Y", self.text_y, 0.15, 0.92)
 
@@ -1398,6 +2245,18 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
         if self.preview_ready:
             self._reload_visuals_only()
 
+    def _pick_shadow_color(self):
+        result = colorchooser.askcolor(color=self.shadow_color, title="Couleur de l'ombre du texte")
+        if result and result[1]:
+            self.shadow_color = result[1]
+            try: self._shadow_swatch.configure(bg=result[1])
+            except Exception: pass
+            try: self._shadow_hex_lbl.configure(text=result[1])
+            except Exception: pass
+            self._schedule_persist()
+            if self.preview_ready:
+                self._reload_visuals_only()
+
     def _set_spectrum_color(self, hex_color: str):
         self.spectrum_color = hex_color
         if hasattr(self, "_spec_swatch"):
@@ -1515,8 +2374,18 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
 
     def _delete_user_preset(self, name: str):
         self.user_presets.pop(name, None)
+        self.user_preset_favorites.discard(name)
         self._persist_now()
         self._refresh_user_presets_ui()
+
+    def _toggle_favorite(self, name: str):
+        if name in self.user_preset_favorites:
+            self.user_preset_favorites.discard(name)
+        else:
+            self.user_preset_favorites.add(name)
+        self._persist_now()
+        self._refresh_user_presets_ui()
+        self._presets_refresh_list()
 
     def _refresh_user_presets_ui(self):
         if not hasattr(self, "_user_presets_frame"):
@@ -1531,6 +2400,7 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
             return
 
         for name in list(self.user_presets.keys()):
+            is_fav = name in self.user_preset_favorites
             row = ctk.CTkFrame(self._user_presets_frame, fg_color=SURF3, corner_radius=6)
             row.pack(fill="x", pady=2)
             ctk.CTkLabel(row, text=name, text_color=TEXT, font=FONT_SM,
@@ -1539,6 +2409,10 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
                  small=True, width=30, height=26, accent=True).pack(side="right", padx=(0, 4))
             _btn(row, "✕", lambda n=name: self._delete_user_preset(n),
                  small=True, width=28, height=26, danger=True).pack(side="right", padx=(0, 4))
+            star_color = "#f59e0b" if is_fav else SURF2
+            _btn(row, "★", lambda n=name: self._toggle_favorite(n),
+                 small=True, width=28, height=26,
+                 fg_color=star_color, hover_color="#d97706").pack(side="right", padx=(0, 4))
 
     # ── Fenêtre réglages ─────────────────────────────────────────────────────────
 
@@ -1646,8 +2520,9 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
 
     def _update_text_preview(self):
         try:
-            artist = self.artist_text.get().strip()
-            title  = self.title_text.get().strip()
+            artist   = self.artist_text.get().strip()
+            title    = self.title_text.get().strip()
+            subtitle = self.subtitle_text.get().strip()
         except Exception:
             return
         if artist and title:
@@ -1658,6 +2533,8 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
             preview = f'"{title}"'
         else:
             preview = "Aucun texte affiché"
+        if subtitle:
+            preview += f' · "{subtitle}"'
         if hasattr(self, "_text_preview_lbl"):
             try:
                 self._text_preview_lbl.configure(text=f"→ {preview}")
@@ -1908,8 +2785,18 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
             "spectrum_tricolor":    bool(self.spectrum_tricolor.get()),
             "spectrum_reactive":    bool(self.spectrum_reactive.get()),
             "font_name":            self.font_name.get(),
+            "show_text":            bool(self.show_text.get()),
+            "font_size_scale":      self.font_size_scale.get(),
+            "subtitle_text":        self.subtitle_text.get(),
+            "shadow_intensity":     self.shadow_intensity.get(),
+            "shadow_color":         self.shadow_color,
+            "shadow_offset_x":      self.shadow_offset_x.get(),
+            "shadow_offset_y":      self.shadow_offset_y.get(),
+            "test_audio_path":      self.test_audio_path,
+            "test_image_path":      self.test_image_path,
         }
         self.config_data["user_presets"] = self.user_presets
+        self.config_data["user_preset_favorites"] = list(self.user_preset_favorites)
         save_config(self.config_data)
 
     def _on_setting_changed(self):
@@ -1953,11 +2840,23 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
     # FICHIERS
     # ══════════════════════════════════════════════════════════════════════════
 
+    def _parse_audio_filename(self, path: str) -> None:
+        """Extrait Artiste / Titre depuis le nom de fichier audio."""
+        stem = Path(path).stem
+        if " - " in stem:
+            left, right = stem.split(" - ", 1)
+            self.artist_text.set(left.strip())
+            self.title_text.set(right.strip())
+        else:
+            self.artist_text.set("")
+            self.title_text.set(stem.strip())
+
     def _pick_audio(self):
         path = filedialog.askopenfilename(
             filetypes=[("Audio", "*.mp3 *.wav *.flac *.ogg *.m4a"), ("Tous", "*.*")])
         if path:
             self.audio_path = path
+            self._parse_audio_filename(path)
             self.show_step_image()
 
     def _pick_image(self):
@@ -2045,6 +2944,13 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
             spectrum_tricolor=bool(self.spectrum_tricolor.get()),
             spectrum_reactive=bool(self.spectrum_reactive.get()),
             font_name=self.font_name.get(),
+            show_text=bool(self.show_text.get()),
+            font_size_scale=float(self.font_size_scale.get()),
+            subtitle_text=self.subtitle_text.get().strip(),
+            shadow_intensity=float(self.shadow_intensity.get()),
+            shadow_color=self.shadow_color,
+            shadow_offset_x=float(self.shadow_offset_x.get()),
+            shadow_offset_y=float(self.shadow_offset_y.get()),
         )
 
     # ══════════════════════════════════════════════════════════════════════════
@@ -2374,5 +3280,90 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
                 self.after(0, lambda: self._set_status("Erreur export", DANGER))
             finally:
                 self.is_rendering = False
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _pick_test_audio(self):
+        path = filedialog.askopenfilename(
+            title="Audio pour le test",
+            filetypes=[("Audio", "*.mp3 *.wav *.flac *.ogg *.m4a *.aac *.wma"), ("Tous", "*.*")],
+        )
+        if path:
+            self.test_audio_path = path
+            self._test_audio_lbl.configure(text=Path(path).name, text_color=TEXT)
+            self._persist_now()
+
+    def _pick_test_image(self):
+        path = filedialog.askopenfilename(
+            title="Pochette pour le test",
+            filetypes=[("Images", "*.jpg *.jpeg *.png *.webp *.bmp"), ("Tous", "*.*")],
+        )
+        if path:
+            self.test_image_path = path
+            self._test_image_lbl.configure(text=Path(path).name, text_color=TEXT)
+            self._persist_now()
+
+    def _start_test_export(self):
+        if self.is_rendering:
+            return
+
+        if not self.test_audio_path or not Path(self.test_audio_path).exists():
+            messagebox.showwarning("Test", "Sélectionne d'abord un fichier audio.")
+            return
+        if not self.test_image_path or not Path(self.test_image_path).exists():
+            messagebox.showwarning("Test", "Sélectionne d'abord une image pochette.")
+            return
+
+        import tempfile
+        tmp_dir = Path(tempfile.gettempdir()) / "tac_test_check"
+        tmp_dir.mkdir(parents=True, exist_ok=True)
+        out_path = str(tmp_dir / "check_preview.mp4")
+
+        settings = self._current_settings(preview=False, short_mode=False)
+        settings.audio_path = self.test_audio_path
+        settings.image_path = self.test_image_path
+        settings.output_path = out_path
+        settings.duration_limit = 15.0
+        settings.start_offset = 0.0
+        settings.output_width = 1920
+        settings.output_height = 1080
+        settings.title_text = ""
+        settings.artist_text = ""
+        settings.subtitle_text = ""
+
+        self._test_btn.configure(state="disabled")
+        self._test_bar.set(0)
+        self._test_bar.pack(fill="x", pady=(0, 4))
+        self._test_detail.configure(text="Préparation...", text_color=MUTED)
+        self._test_detail.pack(anchor="w")
+        self._test_open_btn.pack_forget()
+        self.is_rendering = True
+
+        def _progress(text):
+            self._test_detail.configure(text=text)
+            m = re.search(r"([0-9]+(?:\.[0-9]+)?)%", text)
+            if m:
+                self._test_bar.set(float(m.group(1)) / 100)
+            elif "Encodage" in text:
+                self._test_bar.set(0.97)
+            elif "Terminé" in text:
+                self._test_bar.set(1.0)
+
+        def worker():
+            try:
+                render_video(settings,
+                             progress_callback=lambda t: self.after(0, lambda txt=t: _progress(txt)))
+                def _done():
+                    self._test_detail.configure(text="Terminé ✓", text_color=SUCCESS)
+                    self._test_open_btn.configure(command=lambda: open_file(out_path))
+                    self._test_open_btn.pack(fill="x", pady=(4, 0))
+                self.after(0, _done)
+            except Exception as exc:
+                msg = str(exc)
+                self.after(0, lambda: self._test_detail.configure(
+                    text=f"Erreur : {msg[:80]}", text_color=DANGER))
+            finally:
+                self.is_rendering = False
+                self.after(0, lambda: self._test_btn.configure(state="normal"))
 
         threading.Thread(target=worker, daemon=True).start()
