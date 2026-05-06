@@ -305,42 +305,50 @@ def overlay_center(base, overlay, bass, kick, pulse_strength, is_vertical=False)
     base[y:y + h, x:x + w] = overlay
 
 
-def _draw_text_line(draw, text, font, x_center, y, alpha, shadow_offset=4):
-    """Dessine une ligne de texte centrée avec ombre diagonale."""
+def _draw_text_line(draw, text, font, x_center, y, alpha,
+                    shadow_intensity=0.5, shadow_color_rgb=(0, 0, 0),
+                    shadow_offset_x=4.0, shadow_offset_y=4.0):
+    """Dessine une ligne de texte centrée avec ombre paramétrable."""
     bbox = draw.textbbox((0, 0), text, font=font)
     tw = bbox[2] - bbox[0]
     x = int(x_center - tw / 2)
-    for ox, oy, a in [(-shadow_offset, -shadow_offset, 60),
-                      ( shadow_offset, -shadow_offset, 60),
-                      (-shadow_offset,  shadow_offset, 60),
-                      ( shadow_offset,  shadow_offset, 60)]:
-        draw.text((x + ox, y + oy), text, font=font, fill=(0, 0, 0, a))
+    shadow_a = int(shadow_intensity * 120)
+    if shadow_a > 0:
+        ox, oy = int(shadow_offset_x), int(shadow_offset_y)
+        sr, sg, sb = shadow_color_rgb
+        for dx, dy in [(-ox, -oy), (ox, -oy), (-ox, oy), (ox, oy)]:
+            draw.text((x + dx, y + dy), text, font=font, fill=(sr, sg, sb, shadow_a))
     draw.text((x, y), text, font=font, fill=(255, 255, 255, alpha))
 
 
-def draw_reactive_text(frame, title, rms, kick, text_x=0.50, text_y=0.70, artist="", font_name="Défaut"):
-    """Rend le texte artiste + titre sur la frame.
+def draw_reactive_text(frame, title, rms, kick, text_x=0.50, text_y=0.70,
+                       artist="", font_name="Défaut",
+                       font_size_scale=1.0, subtitle_text="",
+                       shadow_intensity=0.5, shadow_color="#000000",
+                       shadow_offset_x=4.0, shadow_offset_y=4.0):
+    """Rend le texte artiste + titre + sous-titre sur la frame.
 
-    Update 2 : artiste et titre sont deux champs séparés avec tailles différentes.
-    - Artiste : plus grand, bold, couleur pleine
-    - Titre   : légèrement plus petit, style régulier, légèrement atténué
-    - Si artiste vide : affichage titre seul (comportement original)
+    v1.8 : taille de police paramétrable, 3e ligne sous-titre, ombre configurable.
     """
     has_artist = bool(artist.strip())
     has_title  = bool(title.strip())
+    has_sub    = bool(subtitle_text.strip())
 
-    if not has_artist and not has_title:
+    if not has_artist and not has_title and not has_sub:
         return
 
     height, width = frame.shape[:2]
     scale = width / WIDTH
     kick_boost = 1.0 + kick * 0.10 + rms * 0.025
+    fss = max(0.3, float(font_size_scale))
 
-    artist_size = max(16, int(62 * scale * kick_boost))
-    title_size  = max(14, int(44 * scale * kick_boost))
+    artist_size = max(16, int(62 * scale * kick_boost * fss))
+    title_size  = max(14, int(44 * scale * kick_boost * fss))
+    sub_size    = max(12, int(34 * scale * kick_boost * fss))
 
-    font_artist = safe_font(artist_size, bold=True,  font_name=font_name)
-    font_title  = safe_font(title_size,  bold=False, font_name=font_name)
+    font_artist   = safe_font(artist_size, bold=True,  font_name=font_name)
+    font_title    = safe_font(title_size,  bold=False, font_name=font_name)
+    font_subtitle = safe_font(sub_size,    bold=False, font_name=font_name) if has_sub else None
 
     img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
     layer = Image.new("RGBA", img.size, (0, 0, 0, 0))
@@ -348,24 +356,38 @@ def draw_reactive_text(frame, title, rms, kick, text_x=0.50, text_y=0.70, artist
 
     cx = width * text_x
     base_y = int(height * text_y)
-    text_alpha = int(min(255, 210 + kick * 45))
+    text_alpha  = int(min(255, 210 + kick * 45))
     title_alpha = int(text_alpha * 0.82)
-    spacing = int(artist_size * 1.25)
+    sub_alpha   = int(title_alpha * 0.75)
+    spacing_at  = int(artist_size * 1.25)   # artiste top → titre top
+    spacing_ts  = int(title_size  * 1.20)   # titre top → sous-titre top
+
+    shadow_rgb = _parse_hex(shadow_color)
+    shadow_kw = dict(
+        shadow_intensity=shadow_intensity,
+        shadow_color_rgb=shadow_rgb,
+        shadow_offset_x=shadow_offset_x,
+        shadow_offset_y=shadow_offset_y,
+    )
 
     if has_artist and has_title:
-        # Centrer le bloc artiste+titre autour de base_y
-        total_h = spacing + title_size
-        y_artist = base_y - total_h // 2
-        y_title  = y_artist + spacing
-        _draw_text_line(draw, artist.strip(), font_artist, cx, y_artist, text_alpha)
-        _draw_text_line(draw, title.strip(), font_title, cx, y_title, title_alpha)
+        sub_extra = (spacing_ts + sub_size) if has_sub else title_size
+        total_h   = spacing_at + sub_extra
+        y_artist  = base_y - total_h // 2
+        y_title   = y_artist + spacing_at
+        _draw_text_line(draw, artist.strip(), font_artist, cx, y_artist, text_alpha,  **shadow_kw)
+        _draw_text_line(draw, title.strip(),  font_title,  cx, y_title,  title_alpha, **shadow_kw)
+        if has_sub:
+            _draw_text_line(draw, subtitle_text.strip(), font_subtitle, cx, y_title + spacing_ts, sub_alpha, **shadow_kw)
 
     elif has_artist:
         y = base_y - artist_size // 2
-        _draw_text_line(draw, artist.strip(), font_artist, cx, y, text_alpha)
+        _draw_text_line(draw, artist.strip(), font_artist, cx, y, text_alpha, **shadow_kw)
+        if has_sub:
+            _draw_text_line(draw, subtitle_text.strip(), font_subtitle, cx, y + spacing_at, sub_alpha, **shadow_kw)
 
     else:
-        # Titre seul — même comportement qu'avant avec wrapping
+        # Titre seul — avec wrapping
         max_width = int(width * 0.78)
         words = title.strip().split()
         lines, current = [], ""
@@ -383,7 +405,10 @@ def draw_reactive_text(frame, title, rms, kick, text_x=0.50, text_y=0.70, artist
         lh = int(title_size * 1.16)
         y = base_y - len(lines) * lh // 2
         for i, line in enumerate(lines):
-            _draw_text_line(draw, line, font_title, cx, y + i * lh, title_alpha)
+            _draw_text_line(draw, line, font_title, cx, y + i * lh, title_alpha, **shadow_kw)
+        if has_sub:
+            y_sub = y + len(lines) * lh + int(title_size * 0.25)
+            _draw_text_line(draw, subtitle_text.strip(), font_subtitle, cx, y_sub, sub_alpha, **shadow_kw)
 
     img = Image.alpha_composite(img.convert("RGBA"), layer)
     frame[:] = cv2.cvtColor(np.array(img.convert("RGB")), cv2.COLOR_RGB2BGR)
@@ -1005,10 +1030,17 @@ def render_frame(bg, cover, particles, smoke_blobs, spec_frame, metrics,
     if is_v:
         eff_text_y = 0.62
 
-    draw_reactive_text(frame, settings.title_text, rms, kick,
-                       settings.text_x, eff_text_y,
-                       artist=settings.artist_text,
-                       font_name=getattr(settings, "font_name", "Défaut"))
+    if getattr(settings, "show_text", True):
+        draw_reactive_text(frame, settings.title_text, rms, kick,
+                           settings.text_x, eff_text_y,
+                           artist=settings.artist_text,
+                           font_name=getattr(settings, "font_name", "Défaut"),
+                           font_size_scale=getattr(settings, "font_size_scale", 1.0),
+                           subtitle_text=getattr(settings, "subtitle_text", ""),
+                           shadow_intensity=getattr(settings, "shadow_intensity", 0.5),
+                           shadow_color=getattr(settings, "shadow_color", "#000000"),
+                           shadow_offset_x=getattr(settings, "shadow_offset_x", 4.0),
+                           shadow_offset_y=getattr(settings, "shadow_offset_y", 4.0))
 
     if settings.spectrum_style != "Cercle radial":
         draw_spectrum(frame, smoothed_bands, rms, bass, mid, high, settings, raw_frame=raw_frame, kick=kick)

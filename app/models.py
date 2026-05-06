@@ -49,6 +49,15 @@ class RenderSettings:
     # Texte — police
     font_name: str = "Défaut"             # nom affiché (clé dans FONT_REGISTRY)
 
+    # v1.8 — Texte amélioré
+    show_text: bool = True
+    font_size_scale: float = 1.0
+    subtitle_text: str = ""
+    shadow_intensity: float = 0.5
+    shadow_color: str = "#000000"
+    shadow_offset_x: float = 4.0
+    shadow_offset_y: float = 4.0
+
     @property
     def is_vertical(self) -> bool:
         return self.output_height > self.output_width
