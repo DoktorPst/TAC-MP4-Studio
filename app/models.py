@@ -39,6 +39,7 @@ class RenderSettings:
     spectrum_color: str = "#ffffff"
     spectrum_color_auto: bool = False
     floating_bg: bool = False
+    bg_oscillate: bool = False
 
     # Update 7 — spectre 3 couleurs + réactivité
     spectrum_color_mid: str = "#ffffff"   # couleur médiums

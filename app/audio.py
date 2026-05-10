@@ -6,8 +6,57 @@ Update 8 (patch) :
 """
 from __future__ import annotations
 
+import warnings
+
 import numpy as np
 import librosa
+import soundfile as sf
+
+
+def _load_audio(
+    audio_path: str,
+    sr: int = 44100,
+    offset: float = 0.0,
+    duration: float | None = None,
+) -> tuple[np.ndarray, int]:
+    """Load audio using soundfile (fast, WAV/FLAC/OGG); fall back to librosa for other formats."""
+    import scipy.signal
+
+    # Clamp offset so it never starts past the end of the file.
+    # If offset > file duration, fall back to the last `duration` seconds.
+    clamped_offset = offset
+    try:
+        info = sf.info(audio_path)
+        file_dur = info.frames / info.samplerate
+        if clamped_offset >= file_dur:
+            clamped_offset = max(0.0, file_dur - (duration if duration is not None else file_dur))
+    except Exception:
+        pass
+
+    # Fast path — soundfile handles WAV/FLAC/OGG natively without deprecated audioread
+    try:
+        info = sf.info(audio_path)
+        sr_native = info.samplerate
+        start_frame = int(clamped_offset * sr_native)
+        stop_frame = (min(int((clamped_offset + duration) * sr_native), info.frames)
+                      if duration is not None else None)
+        data, _ = sf.read(audio_path, start=start_frame, stop=stop_frame,
+                          dtype="float32", always_2d=True)
+        if len(data) > 0:
+            y = data.mean(axis=1) if data.shape[1] > 1 else data[:, 0]
+            if sr_native != sr:
+                n = int(round(len(y) * sr / sr_native))
+                y = scipy.signal.resample(y, n).astype(np.float32)
+            return y, sr
+    except Exception:
+        pass
+
+    # Fallback — handles MP3, M4A, ADPCM WAV, and anything soundfile can't read
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message="PySoundFile failed")
+        warnings.filterwarnings("ignore", category=FutureWarning, module="librosa")
+        return librosa.load(audio_path, sr=sr, mono=True,
+                            offset=clamped_offset, duration=duration)
 
 
 def _resize_1d(arr: np.ndarray, target_len: int) -> np.ndarray:
@@ -45,11 +94,16 @@ def compute_audio_features(
     start_offset: float = 0.0,
 ) -> dict:
     """Extrait toutes les features audio nécessaires au rendu frame par frame."""
-    y, sr = librosa.load(audio_path, sr=44100, mono=True,
-                         duration=duration_limit, offset=start_offset)
+    try:
+        y, sr = _load_audio(audio_path, sr=44100, offset=start_offset, duration=duration_limit)
+    except Exception as exc:
+        raise RuntimeError(f"Impossible de lire l'audio : {exc}") from exc
     duration = len(y) / sr
     if duration <= 0:
-        raise RuntimeError("Audio vide ou illisible.")
+        raise RuntimeError(
+            f"Audio vide ou illisible (0 s chargées). "
+            f"Fichier : {audio_path!r}, offset={start_offset}, durée limite={duration_limit}"
+        )
 
     hop    = max(1, int(sr / fps))
     frames = max(1, int(duration * fps))

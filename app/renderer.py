@@ -239,30 +239,29 @@ def load_cover_image(path, blur_radius, zoom, width=WIDTH, height=HEIGHT,
     """
     img = Image.open(path).convert("RGB")
 
-    if bg_mode == "gradient":
-        bg_arr = generate_gradient_bg(gradient_top, gradient_bottom, width, height)
-    else:
-        bg = img.copy()
-        src_w, src_h = bg.size
+    def _crop_to_ratio(src: Image.Image) -> Image.Image:
+        src_w, src_h = src.size
         target_ratio = width / height
         src_ratio = src_w / src_h
-
         if src_ratio > target_ratio:
             new_w = int(src_h * target_ratio)
             left = (src_w - new_w) // 2
-            bg = bg.crop((left, 0, left + new_w, src_h))
+            src = src.crop((left, 0, left + new_w, src_h))
         else:
             new_h = int(src_w / target_ratio)
             top_px = (src_h - new_h) // 2
-            bg = bg.crop((0, top_px, src_w, top_px + new_h))
+            src = src.crop((0, top_px, src_w, top_px + new_h))
+        return src
 
-        bg = bg.resize((width, height), Image.LANCZOS)
-        if blur_radius > 0:
-            bg = bg.filter(ImageFilter.GaussianBlur(blur_radius))
-        bg = ImageEnhance.Brightness(bg).enhance(0.16)
-        bg = ImageEnhance.Contrast(bg).enhance(1.25)
+    if bg_mode == "gradient":
+        bg_arr = generate_gradient_bg(gradient_top, gradient_bottom, width, height)
+    else:
+        bg = _crop_to_ratio(img.copy()).resize((width, height), Image.LANCZOS)
+        blur = min(blur_radius, 5) if blur_radius > 0 else 0
+        if blur > 0:
+            bg = bg.filter(ImageFilter.GaussianBlur(blur))
+        bg = ImageEnhance.Brightness(bg).enhance(0.75)
         bg_arr = cv2.cvtColor(np.array(bg), cv2.COLOR_RGB2BGR)
-        bg_arr = cv2.addWeighted(bg_arr, 0.50, np.zeros_like(bg_arr), 0.50, 0)
 
     # Pochette
     is_vertical = height > width
@@ -299,9 +298,6 @@ def overlay_center(base, overlay, bass, kick, pulse_strength, is_vertical=False)
     glow = cv2.GaussianBlur(glow, (91, 91), 0)
     cv2.addWeighted(glow, 0.38, base, 1.0, 0, base)
 
-    pad = max(6, int(18 * width / WIDTH))
-    rounded_rectangle(base, (x - pad, y - pad), (x + w + pad, y + h + pad), 18, (0, 0, 0), -1)
-    rounded_rectangle(base, (x - pad, y - pad), (x + w + pad, y + h + pad), 18, (238, 238, 238), 2)
     base[y:y + h, x:x + w] = overlay
 
 
@@ -891,19 +887,8 @@ def _make_vinyl_disk(cover_pil: Image.Image, radius: int, angle: float,
 
 
 def _make_sleeve(cover_pil: Image.Image, side: int) -> Image.Image:
-    """Génère la pochette d'album (RGBA) avec coins arrondis.
-    Le cadre réactif est dessiné directement sur le numpy frame (draw_vinyl_disk).
-    """
-    radius_corner = max(4, int(side * 0.045))
-    result = Image.new("RGBA", (side, side), (0, 0, 0, 0))
-    sq = cover_pil.resize((side, side), Image.LANCZOS).convert("RGBA")
-    mask = Image.new("L", (side, side), 0)
-    ImageDraw.Draw(mask).rounded_rectangle((0, 0, side - 1, side - 1),
-                                            radius=radius_corner, fill=255)
-    result.paste(sq, mask=mask)
-
-
-    return result
+    """Génère la pochette d'album (RGBA) carrée."""
+    return cover_pil.resize((side, side), Image.LANCZOS).convert("RGBA")
 
 
 def draw_vinyl_disk(
@@ -989,13 +974,21 @@ def render_frame(bg, cover, particles, smoke_blobs, spec_frame, metrics,
         bass_val = float(metrics.get("bass", 0))
         dx = int(math.sin(phase) * 22 * (1.0 + bass_val * 1.8))
         dy = int(math.cos(phase * 0.65) * 12 * (1.0 + bass_val * 1.2))
-        pad = 32  # pixels de marge — doit être >= max drift attendu
+        pad = 32
         padded = np.pad(bg, ((pad, pad), (pad, pad), (0, 0)), mode="edge")
-        py = pad + max(0, min(dy, pad * 2 - 1 - bg.shape[0] + bg.shape[0]))
-        px = pad + max(0, min(dx, pad * 2 - 1 - bg.shape[1] + bg.shape[1]))
-        # Clamp pour rester dans les limites
-        py = max(0, min(py, padded.shape[0] - bg.shape[0]))
-        px = max(0, min(px, padded.shape[1] - bg.shape[1]))
+        py = max(0, min(pad + dy, padded.shape[0] - bg.shape[0]))
+        px = max(0, min(pad + dx, padded.shape[1] - bg.shape[1]))
+        frame = padded[py:py + bg.shape[0], px:px + bg.shape[1]].copy()
+    elif getattr(settings, "bg_oscillate", False):
+        phase = frame_idx * (2.0 * math.pi / (30 * 14))  # cycle 14s lent
+        rms_val  = float(metrics.get("rms",  0))
+        bass_val = float(metrics.get("bass", 0))
+        dx = int(math.sin(phase)        * 3 * (1.0 + rms_val  * 0.6))  # max ~5 px
+        dy = int(math.cos(phase * 0.7)  * 2 * (1.0 + bass_val * 0.4))  # max ~3 px
+        pad = 8
+        padded = np.pad(bg, ((pad, pad), (pad, pad), (0, 0)), mode="edge")
+        py = max(0, min(pad + dy, padded.shape[0] - bg.shape[0]))
+        px = max(0, min(pad + dx, padded.shape[1] - bg.shape[1]))
         frame = padded[py:py + bg.shape[0], px:px + bg.shape[1]].copy()
     else:
         frame = bg.copy()
