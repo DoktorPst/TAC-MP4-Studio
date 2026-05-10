@@ -33,7 +33,12 @@ except ImportError:
 
 from app.audio import compute_audio_features
 from app.config import load_config, save_config, safe_name, DEFAULT_CREATIONS_DIR
+from app.errors import (
+    AudioImportError, ConfigError, ExportError, FFmpegError,
+    ImageImportError, PresetError, PreviewError,
+)
 from app.exporter import render_video, open_file
+from app.logger import get_logger, log_exception
 from app.models import RenderSettings
 from app.presets import (
     GLOBAL_PRESETS, PARTICLE_PRESETS, SMOKE_COLORS, SMOKE_PRESETS, SPECTRUM_STYLES,
@@ -43,6 +48,8 @@ from app.renderer import load_cover_image, render_frame, get_font_names
 from app.ui.preview import PreviewMixin
 from app.ui.editor import EditorMixin
 from app.ui.pages import PagesMixin
+
+_log = get_logger("ui")
 
 PREVIEW_W_V = 304
 PREVIEW_H_V = 540
@@ -160,7 +167,19 @@ class App(PagesMixin, EditorMixin, PreviewMixin, ctk.CTk if not _DND_AVAILABLE e
 
         self.title("TAC MP4 Studio")
         self.configure(bg=BG) if _DND_AVAILABLE else self.configure(fg_color=BG)
-        self.config_data = load_config()
+        try:
+            _icon_path = Path(__file__).resolve().parent.parent.parent / "img" / "icone.png"
+            self._app_icon = ImageTk.PhotoImage(Image.open(_icon_path))
+            self.wm_iconphoto(True, self._app_icon)
+        except Exception:
+            pass
+        try:
+            self.config_data = load_config()
+        except ConfigError as exc:
+            log_exception(exc, context="App.__init__ load_config")
+            messagebox.showwarning("Configuration", exc.message)
+            from app.config import default_config
+            self.config_data = default_config()
         settings = self.config_data.get("settings", {})
         self.geometry(settings.get("window_geometry", "1300x820+60+30"))
         self.minsize(1180, 760)
@@ -196,6 +215,7 @@ class App(PagesMixin, EditorMixin, PreviewMixin, ctk.CTk if not _DND_AVAILABLE e
 
         # Update 3 — fond dégradé
         self.bg_mode         = tk.StringVar(value=settings.get("bg_mode", "photo"))
+        self.bg_image_path   = settings.get("bg_image_path", "")
         self.gradient_top    = settings.get("gradient_top",    "#1a1a2e")
         self.gradient_bottom = settings.get("gradient_bottom", "#0f3460")
 
@@ -213,7 +233,7 @@ class App(PagesMixin, EditorMixin, PreviewMixin, ctk.CTk if not _DND_AVAILABLE e
         self.floating_bg         = tk.BooleanVar(value=bool(settings.get("floating_bg", False)))
         self.bg_oscillate        = tk.BooleanVar(value=bool(settings.get("bg_oscillate", False)))
         self.background_blur       = tk.DoubleVar(value=float(settings.get("background_blur", 8.0)))
-        self.background_brightness = tk.DoubleVar(value=float(settings.get("background_brightness", 0.75)))
+        self.background_brightness = tk.DoubleVar(value=float(settings.get("background_brightness", 0.85)))
 
         # Police du texte (Update 8b)
         self.font_name = tk.StringVar(value=settings.get("font_name", "Défaut"))
@@ -625,7 +645,7 @@ class App(PagesMixin, EditorMixin, PreviewMixin, ctk.CTk if not _DND_AVAILABLE e
         ctk.CTkLabel(ti, text="Fond", text_color=MUTED, font=FONT_MU, anchor="w").pack(anchor="w", pady=(8, 2))
         mr = ctk.CTkFrame(ti, fg_color="transparent")
         mr.pack(fill="x", pady=(0, 8))
-        for val, label in [("photo", "📷 Photo floue"), ("gradient", "🌈 Dégradé")]:
+        for val, label in [("photo", "📷 Photo floue"), ("gradient", "🌈 Dégradé"), ("custom", "📂 Image perso")]:
             ctk.CTkRadioButton(mr, text=label, variable=self.bg_mode, value=val,
                                command=self._on_bg_mode_changed,
                                fg_color=ACCENT, hover_color=ACCHOV,
@@ -635,6 +655,18 @@ class App(PagesMixin, EditorMixin, PreviewMixin, ctk.CTk if not _DND_AVAILABLE e
         self._photo_frame.pack(fill="x")
         self._slider_row(self._photo_frame, "Flou",       self.background_blur,       0.0, 25.0)
         self._slider_row(self._photo_frame, "Luminosité", self.background_brightness, 0.20, 1.0)
+
+        self._custom_bg_row = ctk.CTkFrame(self._photo_frame, fg_color="transparent")
+        _cbg_btn = ctk.CTkFrame(self._custom_bg_row, fg_color="transparent")
+        _cbg_btn.pack(fill="x", pady=(0, 2))
+        _btn(_cbg_btn, "📂  Choisir l'image de fond", self._pick_bg_image,
+             small=True, height=28).pack(side="left")
+        self._bg_image_label = ctk.CTkLabel(
+            self._custom_bg_row,
+            text=self._bg_image_display_name(),
+            text_color=MUTED, font=FONT_MU, anchor="w",
+        )
+        self._bg_image_label.pack(anchor="w", pady=(0, 4))
         _sep(self._photo_frame)
         _pf1 = ctk.CTkFrame(self._photo_frame, fg_color="transparent")
         _pf1.pack(fill="x", pady=(6, 2))
@@ -925,6 +957,7 @@ class App(PagesMixin, EditorMixin, PreviewMixin, ctk.CTk if not _DND_AVAILABLE e
             "background_blur":        float(self.background_blur.get()),
             "background_brightness":  float(self.background_brightness.get()),
             "bg_mode":             self.bg_mode.get(),
+            "bg_image_path":       self.bg_image_path,
             "gradient_top":        self.gradient_top,
             "gradient_bottom":     self.gradient_bottom,
         }
@@ -1054,6 +1087,7 @@ class App(PagesMixin, EditorMixin, PreviewMixin, ctk.CTk if not _DND_AVAILABLE e
                     gradient_top=s.gradient_top,
                     gradient_bottom=s.gradient_bottom,
                     background_brightness=s.background_brightness,
+                    bg_image_path=s.bg_image_path,
                 )
                 # Utilise le frame courant de la preview
                 i = self.preview_index % len(self.preview_features["rms"])
@@ -1217,6 +1251,7 @@ class App(PagesMixin, EditorMixin, PreviewMixin, ctk.CTk if not _DND_AVAILABLE e
             "text_y":           self.text_y.get(),
             "export_mode":      self.export_mode.get(),
             "bg_mode":          self.bg_mode.get(),
+            "bg_image_path":    self.bg_image_path,
             "gradient_top":     self.gradient_top,
             "gradient_bottom":  self.gradient_bottom,
             "vinyl_mode":       bool(self.vinyl_mode.get()),
@@ -1244,7 +1279,11 @@ class App(PagesMixin, EditorMixin, PreviewMixin, ctk.CTk if not _DND_AVAILABLE e
         }
         self.config_data["user_presets"] = self.user_presets
         self.config_data["user_preset_favorites"] = list(self.user_preset_favorites)
-        save_config(self.config_data)
+        try:
+            save_config(self.config_data)
+        except ConfigError as exc:
+            log_exception(exc, context="_persist_now")
+            messagebox.showerror("Configuration", exc.message)
 
     def _apply_global_preset(self):
         p = GLOBAL_PRESETS[self.global_preset.get()]
@@ -1272,6 +1311,10 @@ class App(PagesMixin, EditorMixin, PreviewMixin, ctk.CTk if not _DND_AVAILABLE e
         if "bg_mode" in p:
             self.bg_mode.set(p["bg_mode"])
             self._refresh_gradient_visibility()
+        if "bg_image_path" in p:
+            self.bg_image_path = p["bg_image_path"]
+            if hasattr(self, "_bg_image_label"):
+                self._bg_image_label.configure(text=self._bg_image_display_name())
         if "gradient_top" in p:
             self.gradient_top = p["gradient_top"]
             self._update_gradient_ui()
@@ -1301,6 +1344,16 @@ class App(PagesMixin, EditorMixin, PreviewMixin, ctk.CTk if not _DND_AVAILABLE e
         path = filedialog.askopenfilename(
             filetypes=[("Audio", "*.mp3 *.wav *.flac *.ogg *.m4a"), ("Tous", "*.*")])
         if path:
+            try:
+                if not Path(path).exists():
+                    raise AudioImportError("Fichier audio introuvable.", detail=f"path={path!r}")
+                ext = Path(path).suffix.lower()
+                if ext not in AUDIO_EXTS:
+                    raise AudioImportError("Format audio non supporté.", detail=f"ext={ext!r}")
+            except AudioImportError as exc:
+                log_exception(exc, context="_pick_audio")
+                messagebox.showerror("Audio", exc.message)
+                return
             self.audio_path = path
             self._parse_audio_filename(path)
             self.show_step_image()
@@ -1309,8 +1362,61 @@ class App(PagesMixin, EditorMixin, PreviewMixin, ctk.CTk if not _DND_AVAILABLE e
         path = filedialog.askopenfilename(
             filetypes=[("Images", "*.png *.jpg *.jpeg *.webp"), ("Tous", "*.*")])
         if path:
+            try:
+                if not Path(path).exists():
+                    raise ImageImportError("Fichier image introuvable.", detail=f"path={path!r}")
+                ext = Path(path).suffix.lower()
+                if ext not in IMAGE_EXTS:
+                    raise ImageImportError("Format d'image non supporté.", detail=f"ext={ext!r}")
+                from PIL import Image as _PilImage
+                _PilImage.open(path).verify()
+            except ImageImportError as exc:
+                log_exception(exc, context="_pick_image")
+                messagebox.showerror("Image", exc.message)
+                return
+            except Exception as exc:
+                img_err = ImageImportError(
+                    "Impossible de lire le fichier image.",
+                    detail=str(exc),
+                )
+                log_exception(img_err, context="_pick_image")
+                messagebox.showerror("Image", img_err.message)
+                return
             self.image_path = path
             self.show_editor()
+
+    def _bg_image_display_name(self) -> str:
+        if self.bg_image_path and Path(self.bg_image_path).exists():
+            return Path(self.bg_image_path).name
+        return "Aucune image sélectionnée"
+
+    def _pick_bg_image(self):
+        path = filedialog.askopenfilename(
+            title="Image de fond",
+            filetypes=[("Images", "*.png *.jpg *.jpeg *.webp *.bmp"), ("Tous", "*.*")])
+        if not path:
+            return
+        try:
+            if not Path(path).exists():
+                raise ImageImportError("Fichier image introuvable.", detail=f"path={path!r}")
+            ext = Path(path).suffix.lower()
+            if ext not in IMAGE_EXTS:
+                raise ImageImportError("Format d'image non supporté.", detail=f"ext={ext!r}")
+            from PIL import Image as _PilImage
+            _PilImage.open(path).verify()
+        except ImageImportError as exc:
+            log_exception(exc, context="_pick_bg_image")
+            messagebox.showerror("Image de fond", exc.message)
+            return
+        except Exception as exc:
+            img_err = ImageImportError("Impossible de lire le fichier image.", detail=str(exc))
+            log_exception(img_err, context="_pick_bg_image")
+            messagebox.showerror("Image de fond", img_err.message)
+            return
+        self.bg_image_path = path
+        if hasattr(self, "_bg_image_label"):
+            self._bg_image_label.configure(text=self._bg_image_display_name())
+        self._on_setting_changed()
 
     def _choose_project_root(self):
         path = filedialog.askdirectory(title="Dossier racine des créations")
@@ -1384,6 +1490,7 @@ class App(PagesMixin, EditorMixin, PreviewMixin, ctk.CTk if not _DND_AVAILABLE e
             text_x=float(self.text_x.get()),
             text_y=float(self.text_y.get()),
             bg_mode=self.bg_mode.get(),
+            bg_image_path=self.bg_image_path,
             gradient_top=self.gradient_top,
             gradient_bottom=self.gradient_bottom,
             vinyl_mode=bool(self.vinyl_mode.get()),
@@ -1557,8 +1664,28 @@ class App(PagesMixin, EditorMixin, PreviewMixin, ctk.CTk if not _DND_AVAILABLE e
                 self.after(0, self._hide_export_overlay)
                 self.after(0, lambda: open_file(str(proj_dir)))
                 self.after(0, lambda: self._set_status("Export terminé ✓", SUCCESS))
+            except FFmpegError as exc:
+                log_exception(exc, context="_start_export worker")
+                msg = exc.message
+                self.after(0, lambda: messagebox.showerror("FFmpeg", msg))
+                self.after(0, self._hide_export_overlay)
+                self.after(0, lambda: self._set_status("Erreur export", DANGER))
+            except ExportError as exc:
+                log_exception(exc, context="_start_export worker")
+                msg = exc.message
+                self.after(0, lambda: messagebox.showerror("Export", msg))
+                self.after(0, self._hide_export_overlay)
+                self.after(0, lambda: self._set_status("Erreur export", DANGER))
+            except AudioImportError as exc:
+                log_exception(exc, context="_start_export worker")
+                msg = exc.message
+                self.after(0, lambda: messagebox.showerror("Audio", msg))
+                self.after(0, self._hide_export_overlay)
+                self.after(0, lambda: self._set_status("Erreur export", DANGER))
             except Exception as exc:
-                msg = str(exc)
+                export_err = ExportError("Export interrompu.", detail=str(exc))
+                log_exception(export_err, context="_start_export worker")
+                msg = export_err.message
                 self.after(0, lambda: messagebox.showerror("Erreur export", msg))
                 self.after(0, self._hide_export_overlay)
                 self.after(0, lambda: self._set_status("Erreur export", DANGER))
@@ -1642,8 +1769,25 @@ class App(PagesMixin, EditorMixin, PreviewMixin, ctk.CTk if not _DND_AVAILABLE e
                     self._test_open_btn.configure(command=lambda: open_file(out_path))
                     self._test_open_btn.pack(fill="x", pady=(4, 0))
                 self.after(0, _done)
+            except FFmpegError as exc:
+                log_exception(exc, context="_start_test_export worker")
+                msg = exc.message
+                self.after(0, lambda: self._test_detail.configure(
+                    text=f"Erreur : {msg[:80]}", text_color=DANGER))
+            except ExportError as exc:
+                log_exception(exc, context="_start_test_export worker")
+                msg = exc.message
+                self.after(0, lambda: self._test_detail.configure(
+                    text=f"Erreur : {msg[:80]}", text_color=DANGER))
+            except AudioImportError as exc:
+                log_exception(exc, context="_start_test_export worker")
+                msg = exc.message
+                self.after(0, lambda: self._test_detail.configure(
+                    text=f"Erreur : {msg[:80]}", text_color=DANGER))
             except Exception as exc:
-                msg = str(exc)
+                export_err = ExportError("Export interrompu.", detail=str(exc))
+                log_exception(export_err, context="_start_test_export worker")
+                msg = export_err.message
                 self.after(0, lambda: self._test_detail.configure(
                     text=f"Erreur : {msg[:80]}", text_color=DANGER))
             finally:

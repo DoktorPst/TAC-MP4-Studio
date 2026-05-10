@@ -239,12 +239,18 @@ class EditorMixin:
     def _refresh_bg_mode_visibility(self):
         if not hasattr(self, "_photo_frame") or not hasattr(self, "_gradient_frame"):
             return
-        if self.bg_mode.get() == "gradient":
+        mode = self.bg_mode.get()
+        if mode == "gradient":
             self._photo_frame.pack_forget()
             self._gradient_frame.pack(fill="x")
         else:
             self._gradient_frame.pack_forget()
             self._photo_frame.pack(fill="x")
+        if hasattr(self, "_custom_bg_row"):
+            if mode == "custom":
+                self._custom_bg_row.pack(fill="x", pady=(0, 4))
+            else:
+                self._custom_bg_row.pack_forget()
 
     def _refresh_gradient_visibility(self):
         self._refresh_bg_mode_visibility()

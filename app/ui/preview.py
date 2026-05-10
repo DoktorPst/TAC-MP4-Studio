@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import threading
 import time
+import tkinter
 
 import cv2
 import numpy as np
@@ -13,8 +14,17 @@ import librosa
 from PIL import Image, ImageTk
 
 from app.audio import compute_audio_features
+from app.errors import AudioImportError, ImageImportError, PreviewError
+from app.logger import get_logger, log_exception
 from app.presets import PREVIEW_SECONDS, FPS
 from app.renderer import load_cover_image, render_frame
+
+_log = get_logger("preview")
+
+# ── Cache waveform basse résolution (sr=4000 pour affichage uniquement) ───────
+# Clé : audio_path → (rms, duration)
+_waveform_cache: dict[str, tuple] = {}
+_MAX_WAVEFORM_CACHE = 4
 
 
 class PreviewMixin:
@@ -26,16 +36,30 @@ class PreviewMixin:
     def _load_waveform(self, audio_path):
         def worker():
             try:
-                y, sr = librosa.load(audio_path, sr=4000, mono=True)
-                duration = len(y) / sr
-                hop = max(1, int(sr * 0.08))
-                rms = librosa.feature.rms(y=y, frame_length=hop*2, hop_length=hop)[0]
-                rms = (rms / (np.max(rms) + 1e-9)).astype(np.float32)
+                # Vérifier le cache waveform basse résolution
+                if audio_path in _waveform_cache:
+                    rms, duration = _waveform_cache[audio_path]
+                else:
+                    y, sr = librosa.load(audio_path, sr=4000, mono=True)
+                    duration = len(y) / sr
+                    hop = max(1, int(sr * 0.08))
+                    rms = librosa.feature.rms(y=y, frame_length=hop*2, hop_length=hop)[0]
+                    rms = (rms / (np.max(rms) + 1e-9)).astype(np.float32)
+                    # Stocker dans le cache (éviction si plein)
+                    if len(_waveform_cache) >= _MAX_WAVEFORM_CACHE:
+                        _waveform_cache.pop(next(iter(_waveform_cache)))
+                    _waveform_cache[audio_path] = (rms, duration)
+
                 self.waveform_data = rms
                 self.audio_total_duration = duration
-                self.after(0, self._draw_waveform)
-            except Exception:
-                pass
+                try:
+                    self.after(0, self._draw_waveform)
+                except tkinter.TclError:
+                    pass
+            except AudioImportError as exc:
+                log_exception(exc, context="_load_waveform")
+            except Exception as exc:
+                _log.warning("Waveform load failed: %s", exc)
         threading.Thread(target=worker, daemon=True).start()
 
     def _draw_waveform(self, cursor_t=None):
@@ -104,8 +128,16 @@ class PreviewMixin:
                 t0 = float(self.preview_start.get().replace(",", ".") or 0)
             except ValueError:
                 t0 = 0.0
-            self._draw_waveform(cursor_t=t0 + (time.time() - self.preview_started_at))
-        self.after(200, self._tick_waveform_cursor)
+            current_cursor = t0 + (time.time() - self.preview_started_at)
+            # Ne redessiner que si le curseur a avancé d'au moins 0.1 s
+            last_cursor = getattr(self, "_last_waveform_cursor", -1.0)
+            if abs(current_cursor - last_cursor) >= 0.1:
+                self._last_waveform_cursor = current_cursor
+                self._draw_waveform(cursor_t=current_cursor)
+        try:
+            self.after(200, self._tick_waveform_cursor)
+        except tkinter.TclError:
+            pass
 
     # ══════════════════════════════════════════════════════════════════════════
     # PLEIN ÉCRAN
@@ -193,7 +225,10 @@ class PreviewMixin:
         except Exception:
             pass
 
-        self.after(int(1000 / FPS), self._tick_fullscreen)
+        try:
+            self.after(int(1000 / FPS), self._tick_fullscreen)
+        except tkinter.TclError:
+            pass
 
     # ══════════════════════════════════════════════════════════════════════════
     # PREVIEW
@@ -220,6 +255,7 @@ class PreviewMixin:
                     gradient_top=s.gradient_top,
                     gradient_bottom=s.gradient_bottom,
                     background_brightness=s.background_brightness,
+                    bg_image_path=s.bg_image_path,
                 )
                 self.preview_features  = feat
                 self.preview_bg        = bg
@@ -230,13 +266,40 @@ class PreviewMixin:
                 self.preview_index     = 0
                 self.preview_ready     = True
                 self.preview_running   = True
-                self._preview_job = self.after(0, self._tick_preview)
-                self.after(0, self._draw_waveform)
-                self.after(0, lambda: self._set_status(f"Preview [{fmt}] active", SUCCESS))
+                try:
+                    self._preview_job = self.after(0, self._tick_preview)
+                    self.after(0, self._draw_waveform)
+                    self.after(0, lambda: self._set_status(f"Preview [{fmt}] active", SUCCESS))
+                except tkinter.TclError:
+                    pass
+            except AudioImportError as exc:
+                log_exception(exc, context="_prepare_preview")
+                msg = exc.message
+                try:
+                    self.after(0, lambda: messagebox.showerror("Erreur audio", msg))
+                    self.after(0, lambda: self._set_status("Erreur preview", DANGER))
+                except tkinter.TclError:
+                    pass
+            except ImageImportError as exc:
+                log_exception(exc, context="_prepare_preview")
+                msg = exc.message
+                try:
+                    self.after(0, lambda: messagebox.showerror("Erreur image", msg))
+                    self.after(0, lambda: self._set_status("Erreur preview", DANGER))
+                except tkinter.TclError:
+                    pass
             except Exception as exc:
-                msg = str(exc)
-                self.after(0, lambda: messagebox.showerror("Erreur preview", msg))
-                self.after(0, lambda: self._set_status("Erreur preview", DANGER))
+                preview_exc = PreviewError(
+                    "Une erreur est survenue lors du démarrage de la preview.",
+                    detail=str(exc),
+                )
+                log_exception(preview_exc, context="_prepare_preview")
+                msg = preview_exc.message
+                try:
+                    self.after(0, lambda: messagebox.showerror("Erreur preview", msg))
+                    self.after(0, lambda: self._set_status("Erreur preview", DANGER))
+                except tkinter.TclError:
+                    pass
 
         threading.Thread(target=worker, daemon=True).start()
 
@@ -252,6 +315,7 @@ class PreviewMixin:
                 gradient_top=s.gradient_top,
                 gradient_bottom=s.gradient_bottom,
                 background_brightness=s.background_brightness,
+                bg_image_path=s.bg_image_path,
             )
             self.preview_bg        = bg
             self.preview_cover     = cov
@@ -314,41 +378,62 @@ class PreviewMixin:
             else:
                 pw = wrap_w
                 ph = int(wrap_w * 16 / 9)
-            content_img = img.resize((pw, ph), Image.LANCZOS)
+            # BILINEAR est suffisant pour la preview (x4 plus rapide que LANCZOS)
+            content_img = img.resize((pw, ph), Image.BILINEAR)
             final = Image.new("RGB", (wrap_w, wrap_h), (0, 0, 0))
             final.paste(content_img, ((wrap_w - pw) // 2, (wrap_h - ph) // 2))
         else:
-            final = img.resize((wrap_w, wrap_h), Image.LANCZOS)
+            final = img.resize((wrap_w, wrap_h), Image.BILINEAR)
 
-        self.photo = ImageTk.PhotoImage(final)
-        self.preview_label.configure(image=self.photo)
+        try:
+            self.photo = ImageTk.PhotoImage(final)
+            self.preview_label.configure(image=self.photo)
+        except tkinter.TclError:
+            return
 
         if not self.audio_playing:
             self.preview_index += 1
 
-        self._preview_job = self.after(int(1000 / FPS), self._tick_preview)
+        try:
+            self._preview_job = self.after(int(1000 / FPS), self._tick_preview)
+        except tkinter.TclError:
+            pass
 
     def _play_preview_audio(self):
         import subprocess as _sp
         import shutil
         from tkinter import messagebox
+        from app.errors import FFmpegError
         from app.ui.app import SUCCESS, PREVIEW_SECONDS
         if not shutil.which("ffplay"):
-            messagebox.showerror("Audio", "ffplay introuvable — installe FFmpeg complet.")
+            err = FFmpegError(
+                "FFmpeg est introuvable. Installez-le et ajoutez-le au PATH.",
+                detail="shutil.which('ffplay') returned None",
+            )
+            log_exception(err, context="_play_preview_audio")
+            messagebox.showerror("Audio", err.message)
             return
+        proc = None
         try:
             self._stop_audio()
             start = float(self.preview_start.get().strip().replace(",", ".") or 0)
-            self.ffplay_process = _sp.Popen([
+            proc = _sp.Popen([
                 "ffplay", "-nodisp", "-autoexit", "-loglevel", "quiet",
                 "-ss", f"{start:.3f}", "-t", str(PREVIEW_SECONDS), self.audio_path,
             ])
+            self.ffplay_process = proc
             self.audio_playing = True
             self.preview_started_at = time.time()
             self.preview_index = 0
             self._set_status("▶ Preview  (Espace = pause · F11 = plein écran)", SUCCESS)
             self._tick_waveform_cursor()
         except Exception as exc:
+            if proc is not None:
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
+            _log.warning("Preview audio launch failed: %s", exc)
             messagebox.showerror("Audio preview", str(exc))
 
     def _pause_preview_audio(self):
