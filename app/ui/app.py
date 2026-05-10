@@ -551,7 +551,7 @@ class App(PagesMixin, EditorMixin, PreviewMixin, ctk.CTk if not _DND_AVAILABLE e
         _tab_tips = {
             "⚡": "Presets",
             "📸": "Image · Vinyle · Fond",
-            "✨": "Effets · Particules · Fumée",
+            "✨": "Effets · Particules · Atmosphère",
             "📊": "Spectre · Couleur",
             "📝": "Texte · Police · Ombre",
             "🚀": "Export",
@@ -598,8 +598,10 @@ class App(PagesMixin, EditorMixin, PreviewMixin, ctk.CTk if not _DND_AVAILABLE e
         ti = mkscroll("📸")
 
         ctk.CTkLabel(ti, text="Pochette", text_color=MUTED, font=FONT_MU, anchor="w").pack(anchor="w", pady=(8, 2))
-        self._slider_row(ti, "Taille",     self.image_zoom,     0.65, 1.35)
-        self._slider_row(ti, "Réactivité", self.pulse_strength, 0.0,  2.2)
+        self._slider_row(ti, "Taille", self.image_zoom, 0.65, 1.35)
+        self._pulse_frame = ctk.CTkFrame(ti, fg_color="transparent")
+        self._pulse_frame.pack(fill="x")
+        self._slider_row(self._pulse_frame, "Réactivité", self.pulse_strength, 0.0, 2.2)
 
         _sep(ti)
         vr = ctk.CTkFrame(ti, fg_color="transparent")
@@ -660,9 +662,14 @@ class App(PagesMixin, EditorMixin, PreviewMixin, ctk.CTk if not _DND_AVAILABLE e
 
         # ── ✨ Effets ──────────────────────────────────────────────────────────
         tx = mkscroll("✨")
-        self._combo_row(tx, "Particules",    self.particle_preset, list(PARTICLE_PRESETS.keys()))
-        self._combo_row(tx, "Fumée",         self.smoke_preset,    list(SMOKE_PRESETS.keys()))
-        self._combo_row(tx, "Couleur fumée", self.smoke_color,     list(SMOKE_COLORS.keys()))
+        self._combo_row(tx, "Particules", self.particle_preset, list(PARTICLE_PRESETS.keys()))
+        self._combo_row(tx, "Atmosphère", self.smoke_preset, list(SMOKE_PRESETS.keys()),
+                        command=self._on_smoke_changed)
+        self._smoke_color_frame = ctk.CTkFrame(tx, fg_color="transparent")
+        self._smoke_color_frame.pack(fill="x")
+        self._combo_row(self._smoke_color_frame, "Couleur", self.smoke_color,
+                        list(SMOKE_COLORS.keys()))
+        self._refresh_smoke_opts()
 
         # ── 📝 Texte ──────────────────────────────────────────────────────────
         tt = mkscroll("📝")
@@ -757,13 +764,15 @@ class App(PagesMixin, EditorMixin, PreviewMixin, ctk.CTk if not _DND_AVAILABLE e
         ctk.CTkLabel(tri_hdr, text="🎨  Mode 3 couleurs", text_color=TEXT,
                      font=FONT_H2, anchor="w").pack(side="left")
         ctk.CTkSwitch(tri_hdr, text="", variable=self.spectrum_tricolor,
-                      command=self._on_setting_changed,
+                      command=self._on_tricolor_changed,
                       progress_color=ACCENT, button_color=ACCLT,
                       button_hover_color=ACCENT, width=44, height=22).pack(side="right")
         ctk.CTkLabel(ts, text="Grave → Médiums → Aigus, chaque bande a sa couleur",
                      text_color=MUTED, font=FONT_MU, anchor="w").pack(anchor="w", pady=(0, 6))
 
-        # Color pickers mid + high
+        # Color pickers mid + high — cachés si tricolor OFF
+        self._tricolor_frame = ctk.CTkFrame(ts, fg_color="transparent")
+        self._tricolor_frame.pack(fill="x", pady=(0, 4))
         for attr, label, swatch_attr, hex_attr, pick_fn, reset_fn in [
             ("spectrum_color_mid",  "Médiums (centre)",
              "_spec_swatch_mid",  "_spec_hex_mid",
@@ -774,8 +783,9 @@ class App(PagesMixin, EditorMixin, PreviewMixin, ctk.CTk if not _DND_AVAILABLE e
              lambda: self._pick_spectrum_color_band("high"),
              lambda: self._set_spectrum_color_band("high", "#ffffff")),
         ]:
-            ctk.CTkLabel(ts, text=label, text_color=MUTED, font=FONT_MU, anchor="w").pack(anchor="w", pady=(2, 0))
-            row = ctk.CTkFrame(ts, fg_color="transparent")
+            ctk.CTkLabel(self._tricolor_frame, text=label, text_color=MUTED,
+                         font=FONT_MU, anchor="w").pack(anchor="w", pady=(2, 0))
+            row = ctk.CTkFrame(self._tricolor_frame, fg_color="transparent")
             row.pack(fill="x", pady=(0, 4))
             color_val = getattr(self, attr)
             sw = tk.Label(row, bg=color_val, width=5, relief="flat",
@@ -787,6 +797,7 @@ class App(PagesMixin, EditorMixin, PreviewMixin, ctk.CTk if not _DND_AVAILABLE e
             setattr(self, hex_attr, hl)
             _btn(row, "Choisir", pick_fn, small=True, width=70, height=26).pack(side="left", padx=(6, 0))
             _btn(row, "⬜", reset_fn, small=True, width=36, height=26).pack(side="left", padx=(4, 0))
+        self._refresh_tricolor_opts()
 
         # Mode réactif
         react_row = ctk.CTkFrame(ts, fg_color="transparent")

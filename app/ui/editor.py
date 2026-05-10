@@ -258,8 +258,39 @@ class EditorMixin:
             return
         if self.vinyl_mode.get():
             self._vinyl_opts.pack(fill="x", pady=(0, 6))
+            # Réactivité / Pulse sans effet en mode vinyle
+            if hasattr(self, "_pulse_frame"):
+                self._pulse_frame.pack_forget()
         else:
             self._vinyl_opts.pack_forget()
+            if hasattr(self, "_pulse_frame"):
+                self._pulse_frame.pack(fill="x")
+
+    def _on_smoke_changed(self, _=None):
+        self._refresh_smoke_opts()
+        self._on_setting_changed()
+
+    def _refresh_smoke_opts(self):
+        if not hasattr(self, "_smoke_color_frame"):
+            return
+        from app.presets import SMOKE_PRESETS
+        preset = SMOKE_PRESETS.get(self.smoke_preset.get(), {})
+        if preset.get("density", 0) <= 0:
+            self._smoke_color_frame.pack_forget()
+        else:
+            self._smoke_color_frame.pack(fill="x")
+
+    def _on_tricolor_changed(self, _=None):
+        self._refresh_tricolor_opts()
+        self._on_setting_changed()
+
+    def _refresh_tricolor_opts(self):
+        if not hasattr(self, "_tricolor_frame"):
+            return
+        if self.spectrum_tricolor.get():
+            self._tricolor_frame.pack(fill="x", pady=(0, 4))
+        else:
+            self._tricolor_frame.pack_forget()
 
     # ── Update text preview ───────────────────────────────────────────────────
 
@@ -304,12 +335,13 @@ class EditorMixin:
         ctk.CTkLabel(parent, text=text, font=FONT_SEC, text_color=ACCLT, anchor="w").pack(
             anchor="w", pady=(14, 4), padx=4)
 
-    def _combo_row(self, parent, label, var, values):
+    def _combo_row(self, parent, label, var, values, command=None):
         import customtkinter as ctk
         from app.ui.app import MUTED, FONT_MU, SURF3, BORDER, SURF2, TEXT, FONT_SM
+        cmd = command if command is not None else lambda _: self._on_setting_changed()
         ctk.CTkLabel(parent, text=label, text_color=MUTED, font=FONT_MU, anchor="w").pack(anchor="w", pady=(4, 0))
         ctk.CTkComboBox(parent, variable=var, values=values,
-                        command=lambda _: self._on_setting_changed(),
+                        command=cmd,
                         fg_color=SURF3, border_color=BORDER,
                         button_color=SURF2, button_hover_color=BORDER,
                         dropdown_fg_color=SURF2, text_color=TEXT,
