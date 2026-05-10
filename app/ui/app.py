@@ -208,6 +208,7 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
         self.spectrum_color      = settings.get("spectrum_color", "#ffffff")
         self.spectrum_color_auto = tk.BooleanVar(value=bool(settings.get("spectrum_color_auto", False)))
         self.floating_bg         = tk.BooleanVar(value=bool(settings.get("floating_bg", False)))
+        self.bg_oscillate        = tk.BooleanVar(value=bool(settings.get("bg_oscillate", False)))
 
         # Police du texte (Update 8b)
         self.font_name = tk.StringVar(value=settings.get("font_name", "Défaut"))
@@ -777,14 +778,6 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
                       hover_color="#161616",
                       text_color="#f59e0b",
                       border_color="#2a2000", border_width=1,
-                      font=FONT_SM, corner_radius=8,
-                      height=40, width=340).pack(pady=(0, 6))
-        ctk.CTkButton(inner, text="🎛️  Presets",
-                      command=self.show_presets,
-                      fg_color="transparent",
-                      hover_color="#161616",
-                      text_color=MUTED,
-                      border_color="#1e1e1e", border_width=1,
                       font=FONT_SM, corner_radius=8,
                       height=40, width=340).pack()
 
@@ -1812,50 +1805,6 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
         # ── ⚡ Presets ────────────────────────────────────────────────────────────
         tp = mkscroll("⚡")
 
-        # ── Test rapide ───────────────────────────────────────────────────────
-        ctk.CTkLabel(tp, text="Test rapide (CHECK · 15 s)", text_color=MUTED,
-                     font=FONT_MU, anchor="w").pack(anchor="w", pady=(8, 4))
-
-        ctk.CTkLabel(tp, text="Audio", text_color=MUTED, font=FONT_MU,
-                     anchor="w").pack(anchor="w", pady=(0, 2))
-        _tarow = ctk.CTkFrame(tp, fg_color="transparent")
-        _tarow.pack(fill="x", pady=(0, 4))
-        self._test_audio_lbl = ctk.CTkLabel(
-            _tarow,
-            text=Path(self.test_audio_path).name if self.test_audio_path else "— aucun fichier —",
-            text_color=TEXT if self.test_audio_path else MUTED,
-            font=FONT_MU, anchor="w", wraplength=185)
-        self._test_audio_lbl.pack(side="left", fill="x", expand=True)
-        _btn(_tarow, "...", self._pick_test_audio, small=True, width=32, height=26).pack(side="right")
-
-        ctk.CTkLabel(tp, text="Pochette", text_color=MUTED, font=FONT_MU,
-                     anchor="w").pack(anchor="w", pady=(0, 2))
-        _tirow = ctk.CTkFrame(tp, fg_color="transparent")
-        _tirow.pack(fill="x", pady=(0, 8))
-        self._test_image_lbl = ctk.CTkLabel(
-            _tirow,
-            text=Path(self.test_image_path).name if self.test_image_path else "— aucune image —",
-            text_color=TEXT if self.test_image_path else MUTED,
-            font=FONT_MU, anchor="w", wraplength=185)
-        self._test_image_lbl.pack(side="left", fill="x", expand=True)
-        _btn(_tirow, "...", self._pick_test_image, small=True, width=32, height=26).pack(side="right")
-
-        self._test_btn = _btn(tp, "▶  Tester", self._start_test_export,
-                              accent=True, height=36, small=True)
-        self._test_btn.pack(fill="x", pady=(0, 6))
-        self._test_bar = ctk.CTkProgressBar(tp, progress_color=WARN, fg_color=SURF3)
-        self._test_bar.set(0)
-        self._test_bar.pack(fill="x", pady=(0, 4))
-        self._test_bar.pack_forget()
-        self._test_detail = ctk.CTkLabel(tp, text="", text_color=MUTED,
-                                         font=FONT_MU, anchor="w")
-        self._test_detail.pack(anchor="w")
-        self._test_detail.pack_forget()
-        self._test_open_btn = _btn(tp, "📂  Ouvrir", lambda: None, small=True, height=30)
-        self._test_open_btn.pack(fill="x", pady=(0, 4))
-        self._test_open_btn.pack_forget()
-        _sep(tp)
-
         ctk.CTkLabel(tp, text="Presets intégrés", text_color=MUTED, font=FONT_MU, anchor="w").pack(anchor="w", pady=(8, 2))
         ctk.CTkComboBox(tp, variable=self.global_preset,
                         values=list(GLOBAL_PRESETS.keys()),
@@ -1925,11 +1874,6 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
                      placeholder_text="Titre (optionnel)",
                      fg_color=SURF3, border_color=BORDER, text_color=TEXT,
                      font=FONT_SM).pack(fill="x", pady=(2, 4))
-        ctk.CTkLabel(ta, text="Sous-titre", text_color=MUTED, font=FONT_MU, anchor="w").pack(anchor="w")
-        ctk.CTkEntry(ta, textvariable=self.subtitle_text,
-                     placeholder_text="Sous-titre (optionnel)",
-                     fg_color=SURF3, border_color=BORDER, text_color=TEXT,
-                     font=FONT_SM).pack(fill="x", pady=(2, 4))
         self._text_preview_lbl = ctk.CTkLabel(ta, text="", text_color=ACCLT, font=FONT_MU, anchor="w")
         self._text_preview_lbl.pack(anchor="w", pady=(0, 2))
         # Supprimer les anciennes traces avant re-création
@@ -1940,13 +1884,9 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
         def _on_text_change(*_):
             self._update_text_preview()
             self._auto_fill_project_name()
-        def _on_subtitle_change(*_):
-            self._update_text_preview()
-            self._schedule_persist()
         tid1 = self.artist_text.trace_add("write", _on_text_change)
         tid2 = self.title_text.trace_add("write",  _on_text_change)
-        tid3 = self.subtitle_text.trace_add("write", _on_subtitle_change)
-        self._text_trace_ids = [(self.artist_text, tid1), (self.title_text, tid2), (self.subtitle_text, tid3)]
+        self._text_trace_ids = [(self.artist_text, tid1), (self.title_text, tid2)]
         self._update_text_preview()
         _sep(ta)
 
@@ -2005,6 +1945,14 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
                       progress_color=ACCENT, button_color=ACCLT,
                       button_hover_color=ACCENT, width=44, height=22).pack(side="right")
         ctk.CTkLabel(tf, text="Dérive sinusoïdale réactive aux basses",
+                     text_color=MUTED, font=FONT_MU, anchor="w").pack(anchor="w", pady=(0, 6))
+        osc_r = ctk.CTkFrame(tf, fg_color="transparent")
+        osc_r.pack(fill="x", pady=(0, 2))
+        ctk.CTkLabel(osc_r, text="🎞️  Micro-oscillation", text_color=TEXT, font=FONT_H2, anchor="w").pack(side="left")
+        ctk.CTkSwitch(osc_r, text="", variable=self.bg_oscillate, command=self._on_setting_changed,
+                      progress_color=ACCENT, button_color=ACCLT,
+                      button_hover_color=ACCENT, width=44, height=22).pack(side="right")
+        ctk.CTkLabel(tf, text="Très légers mouvements synchronisés à la musique",
                      text_color=MUTED, font=FONT_MU, anchor="w").pack(anchor="w", pady=(0, 8))
 
         # ── 📊 Spectre ─────────────────────────────────────────────────────────
@@ -2328,6 +2276,7 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
             "spectrum_color":      self.spectrum_color,
             "spectrum_color_auto": bool(self.spectrum_color_auto.get()),
             "floating_bg":         bool(self.floating_bg.get()),
+            "bg_oscillate":        bool(self.bg_oscillate.get()),
             "bg_mode":             self.bg_mode.get(),
             "gradient_top":        self.gradient_top,
             "gradient_bottom":     self.gradient_bottom,
@@ -2358,6 +2307,7 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
         if "vinyl_black" in p:      self.vinyl_black.set(p["vinyl_black"])
         if "spectrum_color" in p:   self._set_spectrum_color(p["spectrum_color"])
         if "floating_bg" in p:      self.floating_bg.set(p["floating_bg"])
+        if "bg_oscillate" in p:     self.bg_oscillate.set(p["bg_oscillate"])
         if "bg_mode" in p:
             self.bg_mode.set(p["bg_mode"])
             self._refresh_gradient_visibility()
@@ -2780,6 +2730,7 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
             "spectrum_color":       self.spectrum_color,
             "spectrum_color_auto":  bool(self.spectrum_color_auto.get()),
             "floating_bg":          bool(self.floating_bg.get()),
+            "bg_oscillate":         bool(self.bg_oscillate.get()),
             "spectrum_color_mid":   self.spectrum_color_mid,
             "spectrum_color_high":  self.spectrum_color_high,
             "spectrum_tricolor":    bool(self.spectrum_tricolor.get()),
@@ -2823,6 +2774,8 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
             self._set_spectrum_color(p["spectrum_color"])
         if "floating_bg" in p:
             self.floating_bg.set(p["floating_bg"])
+        if "bg_oscillate" in p:
+            self.bg_oscillate.set(p["bg_oscillate"])
         if "bg_mode" in p:
             self.bg_mode.set(p["bg_mode"])
             self._refresh_gradient_visibility()
@@ -2904,6 +2857,11 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
             duration_limit = float(PREVIEW_SECONDS)
             raw = self.preview_start.get().strip().replace(",", ".")
             start_offset = float(raw) if raw else 0.0
+            # Clamp cursor so it never starts past the end of the file
+            file_dur = self._get_audio_duration()
+            if file_dur > 0 and start_offset >= file_dur:
+                start_offset = max(0.0, file_dur - duration_limit)
+                self.preview_start.set(f"{start_offset:.1f}")
             out_w, out_h = self._preview_dimensions()
         else:
             duration_limit, start_offset = self._get_export_timing()
@@ -2939,6 +2897,7 @@ class App(ctk.CTk if not _DND_AVAILABLE else TkinterDnD.Tk):
             spectrum_color=self.spectrum_color,
             spectrum_color_auto=bool(self.spectrum_color_auto.get()),
             floating_bg=bool(self.floating_bg.get()),
+            bg_oscillate=bool(self.bg_oscillate.get()),
             spectrum_color_mid=self.spectrum_color_mid,
             spectrum_color_high=self.spectrum_color_high,
             spectrum_tricolor=bool(self.spectrum_tricolor.get()),
