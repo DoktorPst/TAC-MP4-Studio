@@ -12,6 +12,7 @@ import cv2
 import numpy as np
 from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont
 
+from app.logger import get_logger
 from app.models import RenderSettings
 from app.particles import (FloatingParticle, SmokeBlob, VeilBlob,
                            PlasmaTrail, draw_ambient_glow)
@@ -22,17 +23,23 @@ from app.presets import (
 from app.spectrum import draw_spectrum, draw_audio_orb, spectrum_bands
 from app.vinyl import draw_vinyl_disk, _make_sleeve, _composite_image
 
+_log = get_logger("renderer")
+
 # ── Caches ────────────────────────────────────────────────────────────────────
 _vignette_cache: dict[tuple[int, int], np.ndarray] = {}
 _font_cache: dict[tuple[int, bool, str], Any] = {}
 _font_registry: dict[str, str | None] = {}
 _font_registry_built: bool = False
 _color_cache: dict[str, tuple[int, int, int]] = {}   # hex → (r,g,b)
+_MAX_COLOR_CACHE = 64    # taille max du cache couleur — évite la croissance indéfinie
+_MAX_FONT_CACHE  = 64    # ~32 tailles × 2 bold états
 
 
 def _parse_hex(hex_color: str) -> tuple[int, int, int]:
-    """Parse un hex color (#rrggbb) en tuple RGB, avec cache."""
+    """Parse un hex color (#rrggbb) en tuple RGB, avec cache borné."""
     if hex_color not in _color_cache:
+        if len(_color_cache) >= _MAX_COLOR_CACHE:
+            _color_cache.pop(next(iter(_color_cache)))
         h = hex_color.lstrip("#")
         try:
             _color_cache[hex_color] = (int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16))
@@ -171,6 +178,8 @@ def safe_font(size: int, bold: bool = False, font_name: str = "Défaut") -> Any:
     size = max(12, (size // 2) * 2)
     key = (size, bold, font_name)
     if key not in _font_cache:
+        if len(_font_cache) >= _MAX_FONT_CACHE:
+            _font_cache.pop(next(iter(_font_cache)))
         path = _font_registry.get(font_name)
         try:
             if path:
@@ -187,7 +196,9 @@ def safe_font(size: int, bold: bool = False, font_name: str = "Défaut") -> Any:
                         break
                 else:
                     _font_cache[key] = ImageFont.load_default()
-        except Exception:
+        except Exception as exc:
+            _log.warning("Font not found, using default fallback. font_name=%r path=%r error=%s",
+                         font_name, path, exc)
             _font_cache[key] = ImageFont.load_default()
     return _font_cache[key]
 
@@ -236,10 +247,10 @@ def generate_gradient_bg(color_top: str, color_bottom: str,
 
 def load_cover_image(path, blur_radius, zoom, width=WIDTH, height=HEIGHT,
                      bg_mode="photo", gradient_top="#1a1a2e", gradient_bottom="#0f3460",
-                     background_brightness: float = 0.75):
-    """Charge la pochette et génère le background (photo floutée ou dégradé).
+                     background_brightness: float = 0.85, bg_image_path: str = ""):
+    """Charge la pochette et génère le background (photo floutée, dégradé ou image perso).
 
-    Update 3 : bg_mode "photo" | "gradient"
+    bg_mode "photo" | "gradient" | "custom"
     """
     img = Image.open(path).convert("RGB")
 
@@ -259,6 +270,13 @@ def load_cover_image(path, blur_radius, zoom, width=WIDTH, height=HEIGHT,
 
     if bg_mode == "gradient":
         bg_arr = generate_gradient_bg(gradient_top, gradient_bottom, width, height)
+    elif bg_mode == "custom" and bg_image_path and Path(bg_image_path).is_file():
+        bg_src = Image.open(bg_image_path).convert("RGB")
+        bg = _crop_to_ratio(bg_src).resize((width, height), Image.LANCZOS)
+        if blur_radius > 0:
+            bg = bg.filter(ImageFilter.GaussianBlur(float(blur_radius)))
+        bg = ImageEnhance.Brightness(bg).enhance(float(background_brightness))
+        bg_arr = cv2.cvtColor(np.array(bg), cv2.COLOR_RGB2BGR)
     else:
         bg = _crop_to_ratio(img.copy()).resize((width, height), Image.LANCZOS)
         if blur_radius > 0:
@@ -353,7 +371,8 @@ def draw_reactive_text(frame, title, rms, kick, text_x=0.50, text_y=0.70,
     font_title    = safe_font(title_size,  bold=False, font_name=font_name)
     font_subtitle = safe_font(sub_size,    bold=False, font_name=font_name) if has_sub else None
 
-    img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+    # Convertir en RGBA directement pour éviter double convert("RGBA") plus bas
+    img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)).convert("RGBA")
     layer = Image.new("RGBA", img.size, (0, 0, 0, 0))
     draw = ImageDraw.Draw(layer)
 
@@ -413,7 +432,7 @@ def draw_reactive_text(frame, title, rms, kick, text_x=0.50, text_y=0.70,
             y_sub = y + len(lines) * lh + int(title_size * 0.25)
             _draw_text_line(draw, subtitle_text.strip(), font_subtitle, cx, y_sub, sub_alpha, **shadow_kw)
 
-    img = Image.alpha_composite(img.convert("RGBA"), layer)
+    img = Image.alpha_composite(img, layer)
     frame[:] = cv2.cvtColor(np.array(img.convert("RGB")), cv2.COLOR_RGB2BGR)
 
 

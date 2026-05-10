@@ -3,14 +3,36 @@
 Update 8 (patch) :
 - raw_frames vectorisé numpy (suppression boucle Python ~5400 iter)
 - imports déplacés en tête de fichier
+
+Optimisation perf :
+- compute_audio_features mis en cache LRU sur (audio_path, fps, duration_limit, start_offset)
+  pour éviter les re-analyses coûteuses lors des refreshs de preview.
 """
 from __future__ import annotations
 
+import functools
 import warnings
+from pathlib import Path
 
 import numpy as np
 import librosa
 import soundfile as sf
+
+from app.errors import AudioImportError
+
+
+# ── Cache LRU pour compute_audio_features ─────────────────────────────────────
+# Clé : (audio_path, fps, duration_limit, start_offset)
+# Taille max = 4 entrées (couvre preview + export sans accumuler indéfiniment)
+@functools.lru_cache(maxsize=4)
+def _cached_compute_audio_features(
+    audio_path: str,
+    fps: int,
+    duration_limit: float | None,
+    start_offset: float,
+) -> dict:
+    """Version cachée de compute_audio_features — ne pas appeler directement."""
+    return _compute_audio_features_impl(audio_path, fps, duration_limit, start_offset)
 
 
 def _load_audio(
@@ -21,6 +43,20 @@ def _load_audio(
 ) -> tuple[np.ndarray, int]:
     """Load audio using soundfile (fast, WAV/FLAC/OGG); fall back to librosa for other formats."""
     import scipy.signal
+
+    if not Path(audio_path).exists():
+        raise AudioImportError(
+            "Fichier audio introuvable.",
+            detail=f"Path: {audio_path!r}",
+        )
+
+    ext = Path(audio_path).suffix.lower()
+    _SUPPORTED = {".mp3", ".wav", ".flac", ".ogg", ".m4a", ".aac", ".wma", ".opus", ".aiff"}
+    if ext and ext not in _SUPPORTED:
+        raise AudioImportError(
+            "Format audio non supporté.",
+            detail=f"Extension: {ext!r}, path: {audio_path!r}",
+        )
 
     # Clamp offset so it never starts past the end of the file.
     # If offset > file duration, fall back to the last `duration` seconds.
@@ -48,15 +84,25 @@ def _load_audio(
                 n = int(round(len(y) * sr / sr_native))
                 y = scipy.signal.resample(y, n).astype(np.float32)
             return y, sr
+    except AudioImportError:
+        raise
     except Exception:
         pass
 
     # Fallback — handles MP3, M4A, ADPCM WAV, and anything soundfile can't read
-    with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", message="PySoundFile failed")
-        warnings.filterwarnings("ignore", category=FutureWarning, module="librosa")
-        return librosa.load(audio_path, sr=sr, mono=True,
-                            offset=clamped_offset, duration=duration)
+    try:
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="PySoundFile failed")
+            warnings.filterwarnings("ignore", category=FutureWarning, module="librosa")
+            return librosa.load(audio_path, sr=sr, mono=True,
+                                offset=clamped_offset, duration=duration)
+    except AudioImportError:
+        raise
+    except Exception as exc:
+        raise AudioImportError(
+            "Impossible de lire le fichier audio.",
+            detail=str(exc),
+        ) from exc
 
 
 def _resize_1d(arr: np.ndarray, target_len: int) -> np.ndarray:
@@ -93,16 +139,38 @@ def compute_audio_features(
     duration_limit: float | None = None,
     start_offset: float = 0.0,
 ) -> dict:
-    """Extrait toutes les features audio nécessaires au rendu frame par frame."""
+    """Extrait toutes les features audio nécessaires au rendu frame par frame.
+
+    Les résultats sont mis en cache par (audio_path, fps, duration_limit, start_offset).
+    Le cache LRU (maxsize=4) évite les re-analyses lors des rafraîchissements de preview.
+    """
+    return _cached_compute_audio_features(audio_path, fps, duration_limit, start_offset)
+
+
+def _compute_audio_features_impl(
+    audio_path: str,
+    fps: int,
+    duration_limit: float | None,
+    start_offset: float,
+) -> dict:
+    """Implémentation réelle — appelée via le cache LRU."""
     try:
         y, sr = _load_audio(audio_path, sr=44100, offset=start_offset, duration=duration_limit)
+    except AudioImportError:
+        raise
     except Exception as exc:
-        raise RuntimeError(f"Impossible de lire l'audio : {exc}") from exc
+        raise AudioImportError(
+            "Impossible de lire le fichier audio.",
+            detail=str(exc),
+        ) from exc
     duration = len(y) / sr
     if duration <= 0:
-        raise RuntimeError(
-            f"Audio vide ou illisible (0 s chargées). "
-            f"Fichier : {audio_path!r}, offset={start_offset}, durée limite={duration_limit}"
+        raise AudioImportError(
+            "Impossible de lire le fichier audio.",
+            detail=(
+                f"Audio vide ou illisible (0 s chargées). "
+                f"Fichier : {audio_path!r}, offset={start_offset}, durée limite={duration_limit}"
+            ),
         )
 
     hop    = max(1, int(sr / fps))

@@ -30,6 +30,7 @@ class RenderSettings:
     output_height: int = HEIGHT
 
     bg_mode: str = "photo"
+    bg_image_path: str = ""
     gradient_top: str = "#1a1a2e"
     gradient_bottom: str = "#0f3460"
     vinyl_mode: bool = False
@@ -40,7 +41,7 @@ class RenderSettings:
     spectrum_color_auto: bool = False
     floating_bg: bool = False
     bg_oscillate: bool = False
-    background_brightness: float = 0.75
+    background_brightness: float = 0.85
 
     # Update 7 — spectre 3 couleurs + réactivité
     spectrum_color_mid: str = "#ffffff"   # couleur médiums

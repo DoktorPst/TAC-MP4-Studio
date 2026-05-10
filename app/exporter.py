@@ -16,6 +16,7 @@ import cv2
 import numpy as np
 
 from app.audio import compute_audio_features
+from app.errors import ExportError, FFmpegError
 from app.models import RenderSettings
 from app.presets import FPS, WIDTH, HEIGHT
 from app.renderer import load_cover_image, render_frame
@@ -23,7 +24,10 @@ from app.renderer import load_cover_image, render_frame
 
 def require_ffmpeg() -> None:
     if shutil.which("ffmpeg") is None:
-        raise RuntimeError("FFmpeg est introuvable. Ajoute son dossier bin au PATH Windows.")
+        raise FFmpegError(
+            "FFmpeg est introuvable. Installez-le et ajoutez-le au PATH.",
+            detail="shutil.which('ffmpeg') returned None",
+        )
 
 
 def ffmpeg_has_nvenc() -> bool:
@@ -42,9 +46,18 @@ def ffmpeg_has_nvenc() -> bool:
 
 def run_ffmpeg(cmd: list[str]) -> None:
     """Lance une commande FFmpeg et lève une exception en cas d'erreur."""
-    result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    try:
+        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    except FileNotFoundError as exc:
+        raise FFmpegError(
+            "FFmpeg est introuvable. Installez-le et ajoutez-le au PATH.",
+            detail=str(exc),
+        ) from exc
     if result.returncode != 0:
-        raise RuntimeError("Erreur FFmpeg :\n" + result.stderr[-3000:])
+        raise FFmpegError(
+            "FFmpeg a rencontré une erreur lors de l'encodage.",
+            detail="Erreur FFmpeg :\n" + result.stderr[-3000:],
+        )
 
 
 def open_file(path: str) -> None:
@@ -104,7 +117,7 @@ def _add_audio_to_video(
         try:
             run_ffmpeg(nvenc_cmd)
             return
-        except RuntimeError:
+        except (FFmpegError, RuntimeError):
             pass  # Fallback sur libx264
 
     cpu_cmd = base_cmd + [
@@ -127,7 +140,40 @@ def render_video(
     require_ffmpeg()
 
     out_dir = Path(settings.output_path).parent
-    out_dir.mkdir(parents=True, exist_ok=True)
+    if not out_dir.exists():
+        try:
+            out_dir.mkdir(parents=True, exist_ok=True)
+        except PermissionError as exc:
+            raise ExportError(
+                "Permission refusée : impossible d'écrire dans ce dossier.",
+                detail=str(exc),
+            ) from exc
+        except OSError as exc:
+            raise ExportError(
+                "Le dossier de destination n'existe pas.",
+                detail=str(exc),
+            ) from exc
+
+    try:
+        _test = out_dir / ".tac_write_test"
+        _test.touch()
+        _test.unlink()
+    except PermissionError as exc:
+        raise ExportError(
+            "Permission refusée : impossible d'écrire dans ce dossier.",
+            detail=str(exc),
+        ) from exc
+    except OSError:
+        pass
+
+    out_name = Path(settings.output_path).name
+    _INVALID_CHARS = set('<>:"/\\|?*')
+    if any(c in _INVALID_CHARS for c in out_name):
+        raise ExportError(
+            "Nom de fichier invalide.",
+            detail=f"Nom: {out_name!r}",
+        )
+
     temp_video = str(out_dir / "_temp_tac_no_audio.mp4")
 
     if progress_callback:
@@ -153,6 +199,7 @@ def render_video(
         gradient_top=settings.gradient_top,
         gradient_bottom=settings.gradient_bottom,
         background_brightness=settings.background_brightness,
+        bg_image_path=settings.bg_image_path,
     )
 
     particles: list = []
@@ -168,7 +215,10 @@ def render_video(
         (out_w, out_h),
     )
     if not writer.isOpened():
-        raise RuntimeError("Impossible d'ouvrir le moteur vidéo OpenCV.")
+        raise ExportError(
+            "Export interrompu.",
+            detail="Impossible d'ouvrir le moteur vidéo OpenCV (cv2.VideoWriter).",
+        )
 
     try:
         total = len(features["rms"])
@@ -185,19 +235,25 @@ def render_video(
             }
 
             raw_f = features["raw"][i] if "raw" in features else None
-            frame, particles, smoke_blobs, smoothed, vinyl_angle = render_frame(
-                bg,
-                cover,
-                particles,
-                smoke_blobs,
-                features["spec"][:, i],
-                metrics,
-                smoothed,
-                settings,
-                vinyl_angle,
-                frame_idx=i,
-                raw_frame=raw_f,
-            )
+            try:
+                frame, particles, smoke_blobs, smoothed, vinyl_angle = render_frame(
+                    bg,
+                    cover,
+                    particles,
+                    smoke_blobs,
+                    features["spec"][:, i],
+                    metrics,
+                    smoothed,
+                    settings,
+                    vinyl_angle,
+                    frame_idx=i,
+                    raw_frame=raw_f,
+                )
+            except Exception as exc:
+                raise ExportError(
+                    "Export interrompu.",
+                    detail=f"Erreur au rendu de la frame {i}: {exc}",
+                ) from exc
 
             writer.write(frame)
 

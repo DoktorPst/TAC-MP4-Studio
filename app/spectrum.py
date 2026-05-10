@@ -1,6 +1,11 @@
 """Spectre audio — fonctions de rendu du spectre et de l'orbe audio.
 
 Extrait de app/renderer.py pour séparation des responsabilités.
+
+Optimisations perf :
+- Cache des indices de bandes géométriques dans spectrum_bands (évite np.geomspace à chaque frame).
+- Cache des positions angulaires/coordonnées de l'orbe audio (evite math.cos/sin en boucle).
+- Vectorisation du tracé de l'oscilloscope (suppression de boucle Python 256 iter).
 """
 from __future__ import annotations
 
@@ -12,13 +17,27 @@ import numpy as np
 from app.models import RenderSettings
 
 
+# ── Cache des indices de bandes spectrales ────────────────────────────────────
+# Clé : (bins, bar_count) → (starts, ends)
+_bands_idx_cache: dict[tuple[int, int], tuple[np.ndarray, np.ndarray]] = {}
+_MAX_BANDS_CACHE = 16
+
+# ── Cache des positions angulaires de l'orbe ─────────────────────────────────
+# Clé : (n, radius) → (cos_a, sin_a) tableaux float32
+_orb_angle_cache: dict[tuple[int, int], tuple[np.ndarray, np.ndarray]] = {}
+_MAX_ORB_CACHE = 16
+
+
 # ── Helpers couleur (dupliqués ici pour éviter l'import circulaire) ───────────
 
 _color_cache: dict[str, tuple[int, int, int]] = {}
+_MAX_COLOR_CACHE = 64   # ~64 couleurs hex différentes max
 
 
 def _parse_hex(hex_color: str) -> tuple[int, int, int]:
     if hex_color not in _color_cache:
+        if len(_color_cache) >= _MAX_COLOR_CACHE:
+            _color_cache.pop(next(iter(_color_cache)))
         h = hex_color.lstrip("#")
         try:
             _color_cache[hex_color] = (int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16))
@@ -76,10 +95,23 @@ def rounded_rectangle(img, pt1, pt2, radius, color, thickness=-1):
 # ── Spectre ───────────────────────────────────────────────────────────────────
 
 def spectrum_bands(spec_frame, bar_count=84):
+    """Calcule les valeurs de bandes spectrales.
+
+    Les indices de découpe (géométriques) sont mis en cache par (bins, bar_count)
+    pour éviter de recalculer np.geomspace à chaque frame (~84 appels/seconde).
+    """
     bins = len(spec_frame)
-    idx = np.geomspace(1, bins, bar_count + 1).astype(int) - 1
-    idx = np.clip(idx, 0, bins - 1)
-    starts, ends = idx[:-1], np.maximum(idx[1:], idx[:-1] + 1)
+    cache_key = (bins, bar_count)
+    if cache_key not in _bands_idx_cache:
+        if len(_bands_idx_cache) >= _MAX_BANDS_CACHE:
+            _bands_idx_cache.pop(next(iter(_bands_idx_cache)))
+        idx = np.geomspace(1, bins, bar_count + 1).astype(int) - 1
+        idx = np.clip(idx, 0, bins - 1)
+        starts = idx[:-1]
+        ends = np.maximum(idx[1:], idx[:-1] + 1)
+        _bands_idx_cache[cache_key] = (starts, ends)
+
+    starts, ends = _bands_idx_cache[cache_key]
     vals = np.array([spec_frame[s:e].mean() for s, e in zip(starts, ends)], dtype=np.float32)
     return np.clip(np.power(vals, 1.55), 0.0, 1.0)
 
@@ -219,7 +251,10 @@ def draw_spectrum(frame, bands, rms, bass, mid, high, settings: RenderSettings,
 
 def _draw_oscilloscope(frame, raw_frame, rms, bass, high, base_y,
                         start_x, total_w, height, width, size, tint_fn):
-    """Oscilloscope : forme d'onde brute temps réel (Update 5)."""
+    """Oscilloscope : forme d'onde brute temps réel (Update 5).
+
+    Optimisation : calcul vectorisé numpy des coordonnées (évite boucle Python 256 iter).
+    """
     if raw_frame is None or len(raw_frame) == 0:
         return
 
@@ -235,22 +270,25 @@ def _draw_oscilloscope(frame, raw_frame, rms, bass, high, base_y,
     step      = total_w / max(1, n_pts - 1)
     lw        = max(1, int((1.5 + rms * 2.5) * width / 1920))
 
-    glow = np.zeros_like(frame)
-    pts_up   = []
-    pts_down = []
-
-    for i, s in enumerate(samples):
-        x   = int(start_x + i * step)
-        amp = int(np.clip(s * amp_scale, -height * 0.25, height * 0.25))
-        pts_up.append(  (x, center_y - amp))
-        pts_down.append((x, center_y + amp))
+    # Vectorisation : calcul des coordonnées sans boucle Python
+    i_arr = np.arange(n_pts, dtype=np.float32)
+    x_arr = (start_x + i_arr * step).astype(np.int32)
+    amps  = np.clip(samples * amp_scale,
+                    -height * 0.25, height * 0.25).astype(np.int32)
+    y_up   = (center_y - amps).astype(np.int32)
+    y_down = (center_y + amps).astype(np.int32)
 
     bright = int(np.clip(140 + rms * 115 + high * 60, 140, 255))
+    color  = tint_fn(bright)
+    glow = np.zeros_like(frame)
 
-    for pts in (pts_up, pts_down):
-        for i in range(len(pts) - 1):
-            cv2.line(frame, pts[i], pts[i + 1], tint_fn(bright), lw, cv2.LINE_AA)
-            cv2.line(glow,  pts[i], pts[i + 1], tint_fn(bright), lw + 6, cv2.LINE_AA)
+    # Dessiner les segments avec polylines OpenCV
+    pts_up_cv   = np.stack([x_arr, y_up],   axis=1).reshape(-1, 1, 2)
+    pts_down_cv = np.stack([x_arr, y_down], axis=1).reshape(-1, 1, 2)
+    cv2.polylines(frame, [pts_up_cv],   False, color, lw,     cv2.LINE_AA)
+    cv2.polylines(frame, [pts_down_cv], False, color, lw,     cv2.LINE_AA)
+    cv2.polylines(glow,  [pts_up_cv],   False, color, lw + 6, cv2.LINE_AA)
+    cv2.polylines(glow,  [pts_down_cv], False, color, lw + 6, cv2.LINE_AA)
 
     cv2.line(frame, (start_x, center_y), (start_x + total_w, center_y),
              tint_fn(60), 1, cv2.LINE_AA)
@@ -259,8 +297,16 @@ def _draw_oscilloscope(frame, raw_frame, rms, bass, high, base_y,
     cv2.addWeighted(glow, 0.45, frame, 1.0, 0, frame)
 
 
+# Cache des angles de l'arc plasma par (n,) → (cos_a, sin_a)
+_arc_angle_cache: dict[int, tuple[np.ndarray, np.ndarray]] = {}
+_MAX_ARC_CACHE = 8
+
+
 def _draw_arc_plasma(frame, bands, bass, kick, settings, base_y, width, height, size):
-    """Demi-cercle plasma au bas du cadre."""
+    """Demi-cercle plasma au bas du cadre.
+
+    Optimisation : les tableaux cos/sin sont pré-calculés et mis en cache par n.
+    """
     n = min(len(bands), 96)
     sample = np.interp(np.linspace(0, len(bands) - 1, n), np.arange(len(bands)), bands)
 
@@ -270,14 +316,23 @@ def _draw_arc_plasma(frame, bands, bass, kick, settings, base_y, width, height, 
 
     glow_layer = np.zeros_like(frame)
 
+    # Cache des angles (ne dépend que de n)
+    if n not in _arc_angle_cache:
+        if len(_arc_angle_cache) >= _MAX_ARC_CACHE:
+            _arc_angle_cache.pop(next(iter(_arc_angle_cache)))
+        angles = np.array([math.pi + (i / (n - 1)) * math.pi for i in range(n)],
+                          dtype=np.float32)
+        _arc_angle_cache[n] = (np.cos(angles), np.sin(angles))
+
+    cos_a, sin_a = _arc_angle_cache[n]
+
     for i, value in enumerate(sample):
-        angle = math.pi + (i / (n - 1)) * math.pi
         bar_len = int(8 + value * height * 0.09 * size + bass * 18)
 
-        x1 = int(cx + math.cos(angle) * radius)
-        y1 = int(cy + math.sin(angle) * radius)
-        x2 = int(cx + math.cos(angle) * (radius + bar_len))
-        y2 = int(cy + math.sin(angle) * (radius + bar_len))
+        x1 = int(cx + cos_a[i] * radius)
+        y1 = int(cy + sin_a[i] * radius)
+        x2 = int(cx + cos_a[i] * (radius + bar_len))
+        y2 = int(cy + sin_a[i] * (radius + bar_len))
 
         t = float(i) / n
         r = int(255 * (1.0 - t * 0.5))
@@ -336,6 +391,11 @@ def _draw_onde_plasma(frame, bands, rms, bass, mid, high, base_y, start_x, total
 
 
 def draw_audio_orb(frame, bands, bass, kick, settings: RenderSettings):
+    """Rendu de l'orbe audio circulaire.
+
+    Optimisation : les tableaux cos/sin des angles sont mis en cache par (n, radius)
+    pour éviter math.cos/sin en boucle Python (~112 appels/frame).
+    """
     if settings.spectrum_style not in ("Cercle radial", "Cercle + barres"):
         return
 
@@ -362,13 +422,23 @@ def draw_audio_orb(frame, bands, bass, kick, settings: RenderSettings):
     glow_layer = np.zeros_like(frame)
     lw = max(1, int(2 * width / 1920))
 
+    # Cache des cos/sin pour éviter les calculs trigonométriques en boucle
+    angle_key = (n, radius)
+    if angle_key not in _orb_angle_cache:
+        if len(_orb_angle_cache) >= _MAX_ORB_CACHE:
+            _orb_angle_cache.pop(next(iter(_orb_angle_cache)))
+        angles = np.array([(i / n) * math.tau - math.pi / 2 for i in range(n)],
+                          dtype=np.float32)
+        _orb_angle_cache[angle_key] = (np.cos(angles), np.sin(angles))
+
+    cos_a, sin_a = _orb_angle_cache[angle_key]
+
     for i, value in enumerate(sample):
-        angle = (i / n) * math.tau - math.pi / 2
         length = int(6 + value * height * 0.082 * settings.spectrum_size + bass * 12 + kick * 16)
-        x1 = int(center[0] + math.cos(angle) * radius)
-        y1 = int(center[1] + math.sin(angle) * radius)
-        x2 = int(center[0] + math.cos(angle) * (radius + length))
-        y2 = int(center[1] + math.sin(angle) * (radius + length))
+        x1 = int(center[0] + cos_a[i] * radius)
+        y1 = int(center[1] + sin_a[i] * radius)
+        x2 = int(center[0] + cos_a[i] * (radius + length))
+        y2 = int(center[1] + sin_a[i] * (radius + length))
         bright = int(np.clip(92 + value * 160 + bass * 40 + kick * 45, 105, 255))
         if tri:
             color = _tricolor_for_bar(i, n, bright, c_bass, c_mid, c_high,

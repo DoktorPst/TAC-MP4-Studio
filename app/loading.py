@@ -12,6 +12,10 @@ import random
 import cv2
 import numpy as np
 
+from app.logger import get_logger
+
+_log = get_logger("loading")
+
 # ── Constantes ────────────────────────────────────────────────────────────────
 LINES = [
     "The Auralia Criya",
@@ -57,7 +61,7 @@ def render_loading_frame(
     t: float,
     progress: float = 0.0,
     export_label: str = "Export en cours...",
-) -> np.ndarray:
+) -> np.ndarray:  # type: ignore[return]
     """Génère un frame d'écran de chargement.
 
     Args:
@@ -66,6 +70,13 @@ def render_loading_frame(
         progress      : 0.0 → 1.0 (avancement de l'export)
         export_label  : texte de statut affiché en bas
     """
+    try:
+        if width <= 0 or height <= 0:
+            _log.warning("render_loading_frame called with invalid dimensions %dx%d", width, height)
+            return np.zeros((max(1, height), max(1, width), 3), dtype=np.uint8)
+    except Exception:
+        return np.zeros((480, 640, 3), dtype=np.uint8)
+
     rng = random.Random(int(t * 30))   # seed par frame pour cohérence
 
     frame = np.zeros((height, width, 3), dtype=np.uint8)

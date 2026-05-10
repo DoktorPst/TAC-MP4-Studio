@@ -5,6 +5,8 @@ import json
 import os
 from pathlib import Path
 
+from app.errors import ConfigError
+
 
 APP_DATA_DIR = Path(os.getenv("APPDATA", str(Path.home()))) / "DoktorP3st" / "TAC_MP4"
 APP_DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -60,8 +62,11 @@ def load_config() -> dict:
                 cfg.update({k: v for k, v in loaded.items() if k != "settings"})
                 # Fusionne settings en préservant les nouvelles clés par défaut
                 cfg["settings"].update(loaded.get("settings", {}))
-        except (json.JSONDecodeError, OSError):
-            pass  # Config corrompue → on repart des défauts
+        except (json.JSONDecodeError, OSError) as exc:
+            raise ConfigError(
+                "La configuration est corrompue et a été réinitialisée.",
+                detail=str(exc),
+            ) from exc
 
     Path(cfg.get("project_root", DEFAULT_CREATIONS_DIR)).mkdir(parents=True, exist_ok=True)
     return cfg
@@ -69,7 +74,13 @@ def load_config() -> dict:
 
 def save_config(cfg: dict) -> None:
     """Sauvegarde la config sur le disque (écriture atomique via fichier temporaire)."""
-    APP_DATA_DIR.mkdir(parents=True, exist_ok=True)
-    tmp = CONFIG_PATH.with_suffix(".tmp")
-    tmp.write_text(json.dumps(cfg, indent=2, ensure_ascii=False), encoding="utf-8")
-    tmp.replace(CONFIG_PATH)  # Remplacement atomique — évite les configs corrompues
+    try:
+        APP_DATA_DIR.mkdir(parents=True, exist_ok=True)
+        tmp = CONFIG_PATH.with_suffix(".tmp")
+        tmp.write_text(json.dumps(cfg, indent=2, ensure_ascii=False), encoding="utf-8")
+        tmp.replace(CONFIG_PATH)  # Remplacement atomique — évite les configs corrompues
+    except OSError as exc:
+        raise ConfigError(
+            "Impossible de sauvegarder la configuration.",
+            detail=str(exc),
+        ) from exc
