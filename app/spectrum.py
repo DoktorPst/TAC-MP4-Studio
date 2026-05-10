@@ -125,12 +125,22 @@ def draw_spectrum(frame, bands, rms, bass, mid, high, settings: RenderSettings,
 
     # ── Barres premium ────────────────────────────────────────────────────────
     if style == "Barres premium":
+        glow_layer = np.zeros_like(frame)
         for i, value in enumerate(bands):
             x1 = start_x + i * (bar_w + gap)
             x2 = x1 + bar_w
             h = int((height * 0.025 + value * height * 0.21 * size) * (0.82 + bass * 0.45 + rms * 0.2))
             bright = int(np.clip(105 + value * 150 + high * 55, 110, 255))
             rounded_rectangle(frame, (x1, base_y - h), (x2, base_y), max(1, bar_w // 2), tint(bright, i), -1)
+            # Tip glow : halo sur la pointe de chaque barre
+            if h > 4:
+                tip_h = min(h, max(4, int(h * 0.30 + 6)))
+                rounded_rectangle(glow_layer, (x1 - 1, base_y - h),
+                                  (x2 + 1, base_y - h + tip_h),
+                                  max(1, bar_w // 2 + 1), tint(bright, i), -1)
+        blur_k = max(5, (bar_w * 2 + 1) | 1)
+        glow_layer = cv2.GaussianBlur(glow_layer, (blur_k, blur_k), 0)
+        cv2.addWeighted(glow_layer, 0.50, frame, 1.0, 0, frame)
         cv2.line(frame, (start_x, base_y + int(height * 0.022)),
                  (start_x + total_w, base_y + int(height * 0.022)),
                  tint(245, bar_count // 2), max(1, int(1 + bass * 5)), lineType=cv2.LINE_AA)
@@ -349,6 +359,9 @@ def draw_audio_orb(frame, bands, bass, kick, settings: RenderSettings):
         c_mid  = _parse_hex(settings.spectrum_color_mid)
         c_high = _parse_hex(settings.spectrum_color_high)
 
+    glow_layer = np.zeros_like(frame)
+    lw = max(1, int(2 * width / 1920))
+
     for i, value in enumerate(sample):
         angle = (i / n) * math.tau - math.pi / 2
         length = int(6 + value * height * 0.082 * settings.spectrum_size + bass * 12 + kick * 16)
@@ -364,5 +377,9 @@ def draw_audio_orb(frame, bands, bass, kick, settings: RenderSettings):
             color = _tint_bgr(bright, sr, sg, sb)
         else:
             color = (bright, bright, bright)
-        cv2.line(frame, (x1, y1), (x2, y2), color,
-                 max(1, int(2 * width / 1920)), lineType=cv2.LINE_AA)
+        cv2.line(frame,      (x1, y1), (x2, y2), color, lw,     lineType=cv2.LINE_AA)
+        cv2.line(glow_layer, (x1, y1), (x2, y2), color, lw + 4, lineType=cv2.LINE_AA)
+
+    blur_k = 15 | 1
+    glow_layer = cv2.GaussianBlur(glow_layer, (blur_k, blur_k), 0)
+    cv2.addWeighted(glow_layer, 0.55, frame, 1.0, 0, frame)

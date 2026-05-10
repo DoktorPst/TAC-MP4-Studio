@@ -13,7 +13,8 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont
 
 from app.models import RenderSettings
-from app.particles import FloatingParticle, SmokeBlob
+from app.particles import (FloatingParticle, SmokeBlob, VeilBlob,
+                           PlasmaTrail, draw_ambient_glow)
 from app.presets import (
     WIDTH, HEIGHT,
     PARTICLE_PRESETS, SMOKE_PRESETS, SMOKE_COLORS, REGGAE_PALETTE,
@@ -290,15 +291,19 @@ def overlay_center(base, overlay, bass, kick, pulse_strength, is_vertical=False)
     pulse = int((8 + bass * 20 * pulse_strength + kick * 35 * pulse_strength) * (width / WIDTH))
 
     if is_vertical:
-        # En mode SHORT : pochette dans le tiers supérieur
         y = int(height * 0.12)
     else:
         y = (height - h) // 2 - int(height * 0.09)
 
+    # Glow two-pass : halo serré + halo diffus, intensité réactive au kick
+    glow_intensity = 0.30 + bass * 0.10 + kick * 0.20
     glow = np.zeros_like(base)
-    rounded_rectangle(glow, (x - pulse, y - pulse), (x + w + pulse, y + h + pulse), 24, (150, 150, 150), -1)
-    glow = cv2.GaussianBlur(glow, (91, 91), 0)
-    cv2.addWeighted(glow, 0.38, base, 1.0, 0, base)
+    rounded_rectangle(glow, (x - pulse, y - pulse),
+                      (x + w + pulse, y + h + pulse), 24, (155, 155, 155), -1)
+    blur_tight = cv2.GaussianBlur(glow, (55, 55), 0)
+    blur_wide  = cv2.GaussianBlur(glow, (91, 91), 0)
+    glow_combined = cv2.addWeighted(blur_tight, 0.65, blur_wide, 0.40, 0)
+    cv2.addWeighted(glow_combined, glow_intensity, base, 1.0, 0, base)
 
     base[y:y + h, x:x + w] = overlay
 
@@ -431,8 +436,11 @@ def draw_music_linked_particles(frame, particles, high, kick, settings: RenderSe
         p.update(high, kick, preset)
         p.draw(layer, high, kick, preset, width / WIDTH)
 
-    layer = cv2.GaussianBlur(layer, (3, 3), 0)
-    cv2.addWeighted(layer, 0.72, frame, 1.0, 0, frame)
+    # Two-pass bloom : halo serré + halo diffus
+    blur_tight = cv2.GaussianBlur(layer, (5,  5), 0)
+    blur_halo  = cv2.GaussianBlur(layer, (21, 21), 0)
+    bloom = cv2.addWeighted(blur_tight, 0.85, blur_halo, 0.45, 0)
+    cv2.addWeighted(bloom, 0.78, frame, 1.0, 0, frame)
     return particles
 
 
@@ -442,13 +450,31 @@ def draw_smoke(frame, smoke_blobs, bass, kick, settings: RenderSettings):
         smoke_blobs.clear()
         return smoke_blobs
 
-    height, width = frame.shape[:2]
-    target = int(18 * preset["density"] * (width / WIDTH) ** 0.5)
+    smoke_type = preset.get("type", "blob")
 
+    # Lueur ambiante — pas de particules, pur numpy
+    if smoke_type == "glow":
+        smoke_blobs.clear()
+        rgb = SMOKE_COLORS.get(settings.smoke_color, SMOKE_COLORS["Blanc"])
+        draw_ambient_glow(frame, bass, kick, preset, (rgb[2], rgb[1], rgb[0]))
+        return smoke_blobs
+
+    height, width = frame.shape[:2]
+    _BLOB_CLS = {"blob": SmokeBlob, "voiles": VeilBlob, "plasma": PlasmaTrail}
+    blob_cls = _BLOB_CLS.get(smoke_type, SmokeBlob)
+
+    if smoke_type == "voiles":
+        target = max(2, int(4 * preset["density"]))
+    elif smoke_type == "plasma":
+        target = max(4, int(14 * preset["density"] * (width / WIDTH) ** 0.5))
+    else:
+        target = int(18 * preset["density"] * (width / WIDTH) ** 0.5)
+
+    # Remplace les blobs du mauvais type (changement de preset en cours de route)
+    smoke_blobs[:] = [b if isinstance(b, blob_cls) else blob_cls(width, height)
+                      for b in smoke_blobs[:target]]
     while len(smoke_blobs) < target:
-        smoke_blobs.append(SmokeBlob(width, height))
-    if len(smoke_blobs) > target:
-        del smoke_blobs[target:]
+        smoke_blobs.append(blob_cls(width, height))
 
     layer = np.zeros_like(frame)
     for blob in smoke_blobs:
@@ -457,14 +483,14 @@ def draw_smoke(frame, smoke_blobs, bass, kick, settings: RenderSettings):
             rgb = REGGAE_PALETTE[blob.color_index % len(REGGAE_PALETTE)]
         else:
             rgb = SMOKE_COLORS.get(settings.smoke_color, SMOKE_COLORS["Blanc"])
-        color_bgr = (rgb[2], rgb[1], rgb[0])
-        blob.draw(layer, color_bgr, bass, kick, preset)
+        blob.draw(layer, (rgb[2], rgb[1], rgb[0]), bass, kick, preset)
 
-    blur = preset["blur"] | 1
-    if blur > 0:
+    blur = (preset["blur"] | 1) if preset.get("blur", 0) > 0 else 0
+    if blur > 1:
         layer = cv2.GaussianBlur(layer, (blur, blur), 0)
 
-    cv2.addWeighted(layer, 0.82, frame, 1.0, 0, frame)
+    alpha = 0.82 if smoke_type == "voiles" else 0.76
+    cv2.addWeighted(layer, alpha, frame, 1.0, 0, frame)
     return smoke_blobs
 
 
@@ -512,7 +538,9 @@ def render_frame(bg, cover, particles, smoke_blobs, spec_frame, metrics,
     smoke_blobs = draw_smoke(frame, smoke_blobs, bass, kick, settings)
 
     bands = spectrum_bands(spec_frame, 84)
-    smoothed_bands[:] = smoothed_bands * 0.76 + bands * 0.24
+    # Smoothing adaptatif : montée rapide sur les beats, descente lente après
+    alpha = np.where(bands > smoothed_bands, 0.38, 0.14).astype(np.float32)
+    smoothed_bands[:] = smoothed_bands * (1.0 - alpha) + bands * alpha
 
     draw_audio_orb(frame, smoothed_bands, bass, kick, settings)
 

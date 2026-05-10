@@ -255,10 +255,15 @@ PARTICLE_PRESETS: dict[str, dict] = {
 }
 
 SMOKE_PRESETS: dict[str, dict] = {
-    "Aucune":      {"density": 0.00, "speed": 0.00, "blur": 0},
-    "Légère":      {"density": 0.35, "speed": 0.55, "blur": 31},
-    "Cinématique": {"density": 0.78, "speed": 0.85, "blur": 45},
-    "Dense":       {"density": 1.18, "speed": 1.15, "blur": 59},
+    # ── Fumée classique ───────────────────────────────────────────────────────
+    "Aucune":         {"density": 0.00, "speed": 0.00, "blur": 0,   "type": "blob"},
+    "Légère":         {"density": 0.35, "speed": 0.55, "blur": 31,  "type": "blob"},
+    "Cinématique":    {"density": 0.78, "speed": 0.85, "blur": 45,  "type": "blob"},
+    "Dense":          {"density": 1.18, "speed": 1.15, "blur": 59,  "type": "blob"},
+    # ── Nouveaux effets ───────────────────────────────────────────────────────
+    "Voiles":         {"density": 1.00, "speed": 0.35, "blur": 111, "type": "voiles"},
+    "Lueur ambiante": {"density": 1.00, "speed": 1.00, "blur": 0,   "type": "glow"},
+    "Traces plasma":  {"density": 1.20, "speed": 1.20, "blur": 13,  "type": "plasma"},
 }
 
 SPECTRUM_STYLES: list[str] = [
