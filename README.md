@@ -1,43 +1,88 @@
 # TAC MP4 Studio
 
-**Générateur de vidéos musicales réactives** — spectre audio, fumée, particules, vinyle, pochette, texte.  
-Chaque frame est rendue en temps réel et synchronisée à l'audio.
+<div align="center">
+
+**Générateur de vidéos musicales réactives — local, rapide, sans abonnement.**
+
+Transforme n'importe quel fichier audio en vidéo visualisée frame par frame,
+synchronisée beat par beat, exportée en qualité broadcast.
+
+![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=flat-square&logo=python&logoColor=white)
+![OpenCV](https://img.shields.io/badge/OpenCV-4.8+-5C3EE8?style=flat-square&logo=opencv&logoColor=white)
+![CustomTkinter](https://img.shields.io/badge/UI-CustomTkinter-1F6AA5?style=flat-square)
+![FFmpeg](https://img.shields.io/badge/Export-FFmpeg-007808?style=flat-square&logo=ffmpeg&logoColor=white)
+![Platform](https://img.shields.io/badge/Platform-Windows%2010%2F11-0078D4?style=flat-square&logo=windows&logoColor=white)
+
+</div>
 
 ---
 
-## Aperçu
+## Ce que ça fait
 
-- 10 styles de spectre (barres, néon, cercle radial, arc plasma, oscilloscope…)
-- Disque vinyle rotatif réactif aux beats
-- Particules et fumée animées
-- Fond photo floue ou dégradé personnalisable
-- Texte Artiste / Titre avec ombre paramétrable et 12+ polices
-- Preview live 30 fps dans l'éditeur
-- Export horizontal (1920×1080) ou vertical (1080×1920)
-- Encodage GPU (NVENC) automatique si disponible, sinon CPU (libx264)
-- 12 presets intégrés + presets utilisateur sauvegardés
+TAC MP4 Studio analyse l'audio en temps réel et génère une vidéo réactive où chaque élément visuel répond à la musique. Les basses, les kicks, les aigus et l'énergie globale pilotent directement le rendu frame par frame.
+
+```
+Audio ──► Analyse librosa ──► Features (bass / kick / rms / high)
+                                        │
+                               Rendu OpenCV + PIL
+                         ┌──────────────┬──────────────┐
+                         │   Spectre    │  Atmosphère  │
+                         │   Pochette   │  Particules  │
+                         │   Texte      │   Vinyle     │
+                         └──────────────┴──────────────┘
+                                        │
+                         FFmpeg ──► MP4 (NVENC ou libx264)
+```
 
 ---
 
-## Prérequis
+## Fonctionnalités
 
-| Outil | Version | Lien |
-|---|---|---|
-| Windows | 10 / 11 | — |
-| Python | 3.11+ | https://www.python.org/downloads/ |
-| FFmpeg + ffplay | release essentials | https://www.gyan.dev/ffmpeg/builds/ |
+### Visuels
 
-### Installer FFmpeg
+| Composant | Détail |
+|---|---|
+| **10 styles de spectre** | Barres premium · Barres néon · Symétrie miroir · Cercle radial · Arc plasma · Onde plasma · Waveform miroir · Oscilloscope · Ligne fine · Cercle + barres |
+| **7 effets atmosphère** | Aucune · Légère · Cinématique · Dense · **Voiles** · **Lueur ambiante** · **Traces plasma** |
+| **Particules** | 5 presets · cycle de vie · fade in/out · drift organique · bloom two-pass |
+| **Disque vinyle** | Rotatif · réactif aux beats · pochette image ou noir classique |
+| **Fond** | Photo floue (flou + luminosité réglables) · Dégradé personnalisé · Fond flottant · Micro-oscillation |
+| **Texte** | Artiste + Titre · 12+ polices · taille · position · ombre paramétrable |
+
+### Export
+
+| Mode | Résolution | Durée | Usage |
+|---|---|---|---|
+| **CHECK** | 1920 × 1080 | 15 s | Vérification rapide |
+| **SHORT** | 1080 × 1920 | ~1 min (centre audio) | Reel · Story · Short |
+| **COMPLET** | 1920 × 1080 | Fichier entier | Publication finale |
+
+- Encodage **GPU automatique** (NVIDIA NVENC) si disponible, sinon CPU libx264
+- Preview **live 30 fps** dans l'éditeur avant export
+- Historique des exports avec miniatures
+
+---
+
+## Démarrage rapide
+
+### Prérequis
+
+- **Windows 10 / 11**
+- **Python 3.11+** — [python.org](https://www.python.org/downloads/)
+- **FFmpeg** (avec `ffplay`) — [gyan.dev/ffmpeg/builds](https://www.gyan.dev/ffmpeg/builds/)
+
+<details>
+<summary><b>Installer FFmpeg</b></summary>
 
 1. Télécharger `ffmpeg-release-essentials.zip`
 2. Extraire dans `C:\ffmpeg\`
-3. Ajouter `C:\ffmpeg\bin` au PATH Windows :  
-   Démarrer → *Variables d'environnement système* → `Path` → Modifier → Nouveau → `C:\ffmpeg\bin`
-4. Vérifier : `ffmpeg -version` dans un terminal
+3. Ajouter `C:\ffmpeg\bin` au PATH Windows :
+   - `Démarrer` → *Variables d'environnement* → `Path` → Nouveau → `C:\ffmpeg\bin`
+4. Vérifier dans un terminal : `ffmpeg -version`
 
----
+</details>
 
-## Installation
+### Installation
 
 ```bash
 git clone https://github.com/ton-repo/tac_mp4_studio
@@ -46,7 +91,7 @@ pip install -r requirements.txt
 python main.py
 ```
 
-Ou directement via le lanceur Windows :
+Ou via le lanceur Windows :
 
 ```
 TAC.bat
@@ -54,43 +99,35 @@ TAC.bat
 
 ---
 
-## Utilisation rapide
+## Utilisation
 
-1. Cliquer **✦ NOUVELLE CRÉATION**
-2. Importer un fichier audio (MP3, WAV, FLAC, OGG, M4A)
-3. Importer une pochette (PNG, JPG, WEBP)
-4. Ajuster les réglages dans le panneau de droite (6 onglets)
-5. Onglet **🚀 Export** → nommer le projet → choisir le mode → **GÉNÉRER**
+```
+1.  ✦ NOUVELLE CRÉATION
+2.  Importer un fichier audio    (MP3 · WAV · FLAC · OGG · M4A)
+3.  Importer une pochette        (PNG · JPG · WEBP)
+4.  Régler les visuels dans l'éditeur
+5.  🚀 Export → nommer le projet → choisir le mode → GÉNÉRER
+```
 
-### Modes d'export
+### Onglets de l'éditeur
 
-| Mode | Résolution | Durée | Usage |
-|---|---|---|---|
-| CHECK | 1920×1080 | 15 s | Vérification rapide du rendu |
-| SHORT | 1080×1920 | ~1 min | Reel / Story vertical |
-| COMPLET | 1920×1080 | Fichier entier | Publication finale |
+| Onglet | Contenu |
+|---|---|
+| ⚡ **Presets** | 12 presets intégrés · gestion des presets utilisateur |
+| 📸 **Image** | Taille pochette · Réactivité · Vinyle · Fond (flou, luminosité, dégradé, oscillation) |
+| ✨ **Effets** | Particules · Atmosphère · Couleur |
+| 📊 **Spectre** | Style · Taille · Position · Couleur (mono ou 3 bandes) · Flash beats |
+| 📝 **Texte** | Artiste · Titre · Police · Taille · Position · Ombre |
+| 🚀 **Export** | Dossier · Mode · Génération |
 
 ### Raccourcis clavier
 
 | Touche | Action |
 |---|---|
-| `Espace` | Play / Pause la preview audio |
+| `Espace` | Play / Pause preview audio |
 | `R` | Recharger la preview |
 | `F11` | Preview plein écran |
 | `Échap` | Quitter le plein écran |
-
----
-
-## Onglets de l'éditeur
-
-| Onglet | Contenu |
-|---|---|
-| ⚡ Presets | 12 presets intégrés + gestion des presets utilisateur |
-| 📸 Image | Taille pochette · Pulse · Vinyle · Fond (flou, luminosité, dégradé, oscillation) |
-| ✨ Effets | Particules · Fumée · Couleur fumée |
-| 📊 Spectre | Style · Taille · Position · Couleur (mono ou 3 bandes) · Flash beats |
-| 📝 Texte | Artiste · Titre · Police · Taille · Position · Ombre |
-| 🚀 Export | Dossier de sortie · Mode · Génération |
 
 ---
 
@@ -98,91 +135,92 @@ TAC.bat
 
 ```
 tac_mp4_studio/
-├── main.py                  ← point d'entrée
+│
+├── main.py                    Point d'entrée
+├── TAC.bat                    Lanceur Windows
 ├── requirements.txt
-├── TAC.bat                  ← lanceur Windows
-├── img/
-│   ├── tac.png              ← logo
-│   └── vinyle.png           ← asset disque vinyle
-├── fonts/                   ← polices TTF incluses
+│
+├── img/                       Assets (logo, disque vinyle)
+├── fonts/                     Polices TTF incluses
+│
 └── app/
-    ├── audio.py             ← analyse audio (librosa + soundfile)
-    ├── config.py            ← persistance JSON (AppData)
-    ├── exporter.py          ← pipeline export FFmpeg
-    ├── loading.py           ← écran de chargement animé
-    ├── models.py            ← RenderSettings (dataclass)
-    ├── particles.py         ← FloatingParticle, SmokeBlob
-    ├── presets.py           ← constantes, presets visuels, palettes
-    ├── renderer.py          ← rendu frame (image, texte, fond, vignette)
-    ├── spectrum.py          ← 9 styles de spectre + orb audio
-    ├── vinyl.py             ← disque vinyle rotatif + pochette
+    ├── audio.py               Analyse audio (librosa + soundfile + scipy)
+    ├── config.py              Persistance JSON (AppData)
+    ├── exporter.py            Pipeline export FFmpeg
+    ├── loading.py             Écran de chargement animé
+    ├── models.py              RenderSettings (dataclass)
+    ├── particles.py           Particules · Fumée · Voiles · Plasma · Lueur ambiante
+    ├── presets.py             Constantes · Presets visuels · Palettes
+    ├── renderer.py            Rendu frame (image, texte, fond, vignette, glow)
+    ├── spectrum.py            10 styles de spectre + orbe audio
+    ├── vinyl.py               Disque vinyle rotatif + pochette
+    │
     └── ui/
-        ├── app.py           ← App (état, lifecycle, navigation)
-        ├── editor.py        ← EditorMixin (onglets éditeur)
-        ├── pages.py         ← PagesMixin (accueil, historique, turbo, presets)
-        ├── preview.py       ← PreviewMixin (preview live, waveform, audio)
-        └── widgets.py       ← widgets réutilisables
+        ├── app.py             App — état, lifecycle, navigation, éditeur
+        ├── editor.py          EditorMixin — onglets éditeur + callbacks
+        ├── pages.py           PagesMixin — accueil, historique, turbo, presets
+        ├── preview.py         PreviewMixin — preview live, waveform, audio
+        └── widgets.py         Widgets réutilisables
 ```
 
-### Flux de rendu
+### Flux de dépendances
 
 ```
-Audio → compute_audio_features() → features (rms, bass, kick, mid, high, spec)
-                                         ↓
-Image → load_cover_image()       → bg_arr + cover_arr
-                                         ↓
-                              render_frame() ← spectrum.py
-                                         ↓   ← vinyl.py
-                              frame BGR numpy
-                                         ↓
-                              cv2.VideoWriter → vidéo muette
-                                         ↓
-                              FFmpeg → vidéo finale + audio
+App
+ ├─ EditorMixin · PagesMixin · PreviewMixin
+ ├─ renderer ──► spectrum · vinyl · particles
+ ├─ exporter ──► renderer · audio
+ └─ config · models · presets
 ```
 
 ---
 
 ## Configuration
 
-Sauvegardée automatiquement dans :
+Sauvegarde automatique dans :
+
 ```
 %APPDATA%\DoktorP3st\TAC_MP4\config.json
 ```
 
-Projets exportés dans (modifiable dans les réglages) :
+Dossier de sortie par défaut (modifiable dans l'app) :
+
 ```
 %APPDATA%\DoktorP3st\TAC_MP4\Creations\
 ```
 
 ---
 
-## Packaging en .exe
+## Packaging .exe
 
 ```bash
 pip install pyinstaller
 pyinstaller --onefile --noconsole --name "TAC_MP4_Studio" --collect-data librosa main.py
 ```
 
-Exécutable dans `dist/TAC_MP4_Studio.exe`.  
-Distribuer avec FFmpeg ou indiquer à l'utilisateur de l'installer séparément.
+L'exécutable se trouve dans `dist/TAC_MP4_Studio.exe`.  
+À distribuer avec FFmpeg, ou indiquer à l'utilisateur de l'installer séparément.
 
 ---
 
-## Dépendances Python
+## Stack
 
 ```
-numpy >= 1.24
-opencv-python >= 4.8
-Pillow >= 10.0
-librosa >= 0.10
-soundfile >= 0.12
-customtkinter >= 5.2
-tkinterdnd2 >= 0.3.0   # optionnel — drag & drop désactivé si absent
-scipy                  # installé automatiquement via librosa
+numpy            Calcul vectorisé — audio et rendu
+opencv-python    Pipeline vidéo frame par frame
+Pillow           Traitement image · texte · polices
+librosa          Analyse audio (STFT · onset · RMS)
+soundfile        Chargement WAV/FLAC/OGG (fast path)
+scipy            Resampling audio · interpolation
+customtkinter    Interface dark theme moderne
+tkinterdnd2      Drag & drop fichiers (optionnel)
+FFmpeg           Encodage MP4 (NVENC / libx264)
 ```
 
 ---
 
-## Auteur
+<div align="center">
 
 Développé par **DoktorP3st**
+
+</div>
