@@ -152,6 +152,7 @@ def render_video(
         bg_mode=settings.bg_mode,
         gradient_top=settings.gradient_top,
         gradient_bottom=settings.gradient_bottom,
+        background_brightness=settings.background_brightness,
     )
 
     particles: list = []

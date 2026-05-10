@@ -232,7 +232,8 @@ def generate_gradient_bg(color_top: str, color_bottom: str,
 
 
 def load_cover_image(path, blur_radius, zoom, width=WIDTH, height=HEIGHT,
-                     bg_mode="photo", gradient_top="#1a1a2e", gradient_bottom="#0f3460"):
+                     bg_mode="photo", gradient_top="#1a1a2e", gradient_bottom="#0f3460",
+                     background_brightness: float = 0.75):
     """Charge la pochette et génère le background (photo floutée ou dégradé).
 
     Update 3 : bg_mode "photo" | "gradient"
@@ -257,10 +258,9 @@ def load_cover_image(path, blur_radius, zoom, width=WIDTH, height=HEIGHT,
         bg_arr = generate_gradient_bg(gradient_top, gradient_bottom, width, height)
     else:
         bg = _crop_to_ratio(img.copy()).resize((width, height), Image.LANCZOS)
-        blur = min(blur_radius, 5) if blur_radius > 0 else 0
-        if blur > 0:
-            bg = bg.filter(ImageFilter.GaussianBlur(blur))
-        bg = ImageEnhance.Brightness(bg).enhance(0.75)
+        if blur_radius > 0:
+            bg = bg.filter(ImageFilter.GaussianBlur(float(blur_radius)))
+        bg = ImageEnhance.Brightness(bg).enhance(float(background_brightness))
         bg_arr = cv2.cvtColor(np.array(bg), cv2.COLOR_RGB2BGR)
 
     # Pochette

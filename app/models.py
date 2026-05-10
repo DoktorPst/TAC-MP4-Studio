@@ -25,7 +25,7 @@ class RenderSettings:
 
     text_x: float = 0.50
     text_y: float = 0.70
-    background_blur: int = 38
+    background_blur: float = 8.0
     output_width: int = WIDTH
     output_height: int = HEIGHT
 
@@ -40,6 +40,7 @@ class RenderSettings:
     spectrum_color_auto: bool = False
     floating_bg: bool = False
     bg_oscillate: bool = False
+    background_brightness: float = 0.75
 
     # Update 7 — spectre 3 couleurs + réactivité
     spectrum_color_mid: str = "#ffffff"   # couleur médiums
