@@ -253,6 +253,7 @@ class App(PagesMixin, EditorMixin, PreviewMixin, ctk.CTk if not _DND_AVAILABLE e
         self._turbo_stop:  bool         = False
         self._turbo_running: bool       = False
         self._turbo_image: str          = ""
+        self._turbo_bg_image: str       = ""
         self._turbo_view_active: bool   = False
 
         # Update 7 — spectre 3 couleurs + réactivité
@@ -960,6 +961,8 @@ class App(PagesMixin, EditorMixin, PreviewMixin, ctk.CTk if not _DND_AVAILABLE e
             "bg_image_path":       self.bg_image_path,
             "gradient_top":        self.gradient_top,
             "gradient_bottom":     self.gradient_bottom,
+            "background_blur":        float(self.background_blur.get()),
+            "background_brightness":  float(self.background_brightness.get()),
         }
 
     def _toggle_favorite(self, name: str):
@@ -1417,6 +1420,160 @@ class App(PagesMixin, EditorMixin, PreviewMixin, ctk.CTk if not _DND_AVAILABLE e
         if hasattr(self, "_bg_image_label"):
             self._bg_image_label.configure(text=self._bg_image_display_name())
         self._on_setting_changed()
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # TURBO
+    # ══════════════════════════════════════════════════════════════════════════
+
+    def _turbo_pick_image(self):
+        path = filedialog.askopenfilename(
+            title="Pochette globale Turbo",
+            filetypes=[("Images", "*.png *.jpg *.jpeg *.webp *.bmp"), ("Tous", "*.*")])
+        if not path:
+            return
+        self._turbo_image = path
+        if hasattr(self, "_turbo_img_var"):
+            self._turbo_img_var.set(Path(path).name)
+
+    def _turbo_pick_bg(self):
+        path = filedialog.askopenfilename(
+            title="Image de fond Turbo",
+            filetypes=[("Images", "*.png *.jpg *.jpeg *.webp *.bmp"), ("Tous", "*.*")])
+        if not path:
+            return
+        self._turbo_bg_image = path
+        if hasattr(self, "_turbo_bg_var"):
+            self._turbo_bg_var.set(Path(path).name)
+
+    def _turbo_pick_files(self):
+        paths = filedialog.askopenfilenames(
+            title="Fichiers audio pour Turbo",
+            filetypes=[("Audio", "*.mp3 *.wav *.flac *.ogg *.m4a *.aac *.wma"), ("Tous", "*.*")])
+        if paths:
+            self._turbo_add_paths(list(paths))
+
+    def _turbo_stop_fn(self):
+        self._turbo_stop = True
+        self._set_status("⏹ Turbo stoppé", WARN)
+
+    def _turbo_build_settings(self, preset: dict, audio: str, image: str, output: str,
+                               title: str, artist: str, is_short: bool, is_check: bool):
+        from app.models import RenderSettings
+        from app.presets import WIDTH, HEIGHT, SHORT_WIDTH, SHORT_HEIGHT
+        if is_short:
+            out_w, out_h, dur = SHORT_WIDTH, SHORT_HEIGHT, 60.0
+        elif is_check:
+            out_w, out_h, dur = WIDTH, HEIGHT, 15.0
+        else:
+            out_w, out_h, dur = WIDTH, HEIGHT, None
+
+        bg_mode = preset.get("bg_mode", "photo")
+        bg_img  = self._turbo_bg_image
+        if bg_img and Path(bg_img).exists():
+            bg_mode = "custom"
+
+        return RenderSettings(
+            audio_path=audio, image_path=image, output_path=output,
+            title_text=title, artist_text=artist,
+            duration_limit=dur, start_offset=0.0,
+            particle_preset=preset.get("particle_preset", "Premium"),
+            smoke_preset=preset.get("smoke_preset", "Cinématique"),
+            smoke_color=preset.get("smoke_color", "Blanc"),
+            spectrum_style=preset.get("spectrum_style", "Cercle radial"),
+            spectrum_size=float(preset.get("spectrum_size", 1.05)),
+            spectrum_y=float(preset.get("spectrum_y", 0.90)),
+            image_zoom=float(preset.get("image_zoom", 1.00)),
+            pulse_strength=float(preset.get("pulse_strength", 1.10)),
+            background_blur=float(preset.get("background_blur", 8.0)),
+            background_brightness=float(preset.get("background_brightness", 0.85)),
+            output_width=out_w, output_height=out_h,
+            bg_mode=bg_mode,
+            bg_image_path=bg_img or preset.get("bg_image_path", ""),
+            gradient_top=preset.get("gradient_top", "#1a1a2e"),
+            gradient_bottom=preset.get("gradient_bottom", "#0f3460"),
+            vinyl_mode=bool(preset.get("vinyl_mode", False)),
+            vinyl_black=bool(preset.get("vinyl_black", False)),
+            spectrum_color=preset.get("spectrum_color", "#ffffff"),
+            spectrum_color_auto=bool(preset.get("spectrum_color_auto", False)),
+            floating_bg=bool(preset.get("floating_bg", False)),
+            bg_oscillate=bool(preset.get("bg_oscillate", False)),
+            spectrum_color_mid=preset.get("spectrum_color_mid", "#ffffff"),
+            spectrum_color_high=preset.get("spectrum_color_high", "#ffffff"),
+            spectrum_tricolor=bool(preset.get("spectrum_tricolor", False)),
+            spectrum_reactive=bool(preset.get("spectrum_reactive", False)),
+            font_name=preset.get("font_name", "Défaut"),
+            show_text=bool(preset.get("show_text", True)),
+            font_size_scale=float(preset.get("font_size_scale", 1.0)),
+            subtitle_text=preset.get("subtitle_text", ""),
+            shadow_intensity=float(preset.get("shadow_intensity", 0.5)),
+            shadow_color=preset.get("shadow_color", "#000000"),
+            shadow_offset_x=float(preset.get("shadow_offset_x", 4.0)),
+            shadow_offset_y=float(preset.get("shadow_offset_y", 4.0)),
+        )
+
+    def _turbo_start(self):
+        if self.is_rendering:
+            return
+        pending = [it for it in self._turbo_queue if not it["status"].startswith("✅")]
+        if not pending:
+            messagebox.showwarning("Turbo", "Aucun fichier en attente.")
+            return
+
+        preset_name = self._turbo_preset_var.get() if hasattr(self, "_turbo_preset_var") else ""
+        preset = self.user_presets.get(preset_name, {})
+        fmt = self._turbo_format_var.get() if hasattr(self, "_turbo_format_var") else "COMPLET"
+        is_short = (fmt == "SHORT")
+        is_check = (fmt == "CHECK")
+
+        self._turbo_stop = False
+        self.is_rendering = True
+        self._set_status(f"⚡ Turbo — 0/{len(pending)}", WARN)
+
+        def worker():
+            done = 0
+            for item in pending:
+                if self._turbo_stop:
+                    break
+                audio = item["audio"]
+                image = item.get("image") or self._turbo_image
+                if not image or not Path(image).exists():
+                    self.after(0, lambda i=item: i["_status_lbl"] and
+                               i["_status_lbl"].configure(text="❌ Image manquante", text_color=DANGER))
+                    item["status"] = "❌ Image manquante"
+                    continue
+
+                title  = item["title_var"].get().strip()  or Path(audio).stem
+                artist = item["artist_var"].get().strip()
+                safe   = safe_name((f"{artist} - {title}") if artist else title)
+                proj_dir = Path(self.project_root) / "Turbo" / safe
+                proj_dir.mkdir(parents=True, exist_ok=True)
+                output = str(proj_dir / f"{safe}.mp4")
+
+                self.after(0, lambda i=item: i["_status_lbl"] and
+                           i["_status_lbl"].configure(text="🔄 Rendu...", text_color=WARN))
+
+                try:
+                    settings = self._turbo_build_settings(
+                        preset=preset, audio=audio, image=image, output=output,
+                        title=title, artist=artist, is_short=is_short, is_check=is_check)
+                    render_video(settings)
+                    done += 1
+                    item["status"] = "✅ OK"
+                    self.after(0, lambda i=item: i["_status_lbl"] and
+                               i["_status_lbl"].configure(text="✅ OK", text_color=SUCCESS))
+                    self.after(0, lambda: self._set_status(
+                        f"⚡ Turbo — {done}/{len(pending)}", WARN))
+                except Exception as exc:
+                    item["status"] = "❌ Erreur"
+                    msg = str(exc)[:40]
+                    self.after(0, lambda i=item, m=msg: i["_status_lbl"] and
+                               i["_status_lbl"].configure(text=f"❌ {m}", text_color=DANGER))
+
+            self.is_rendering = False
+            self.after(0, lambda: self._set_status(
+                f"⚡ Turbo terminé — {done}/{len(pending)} ✓", SUCCESS))
+
+        threading.Thread(target=worker, daemon=True).start()
 
     def _choose_project_root(self):
         path = filedialog.askdirectory(title="Dossier racine des créations")

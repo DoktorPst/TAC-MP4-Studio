@@ -421,6 +421,14 @@ class PagesMixin:
         turbo_img_entry.pack(side="left", padx=(4, 0))
         _btn(r1, "📂", self._turbo_pick_image, small=True, width=32, height=28).pack(side="left", padx=(4, 24))
 
+        ctk.CTkLabel(r1, text="Fond", text_color=MUTED, font=FONT_MU, width=38, anchor="w").pack(side="left")
+        self._turbo_bg_var = tk.StringVar(value=Path(self._turbo_bg_image).name if self._turbo_bg_image else "")
+        ctk.CTkEntry(r1, textvariable=self._turbo_bg_var,
+                     placeholder_text="Image de fond (optionnel)",
+                     fg_color=SURF3, border_color=BORDER, text_color=TEXT,
+                     font=FONT_MU, width=180, state="readonly").pack(side="left", padx=(4, 0))
+        _btn(r1, "📂", self._turbo_pick_bg, small=True, width=32, height=28).pack(side="left", padx=(4, 0))
+
         ctk.CTkLabel(r1, text="Preset ★", text_color=MUTED, font=FONT_MU, width=60, anchor="w").pack(side="left")
         fav_names = [n for n in self.user_presets if n in self.user_preset_favorites]
         if not fav_names:
@@ -480,6 +488,60 @@ class PagesMixin:
         self._turbo_bottom_bar.pack(fill="x", pady=(6, 0))
         if any(it["status"].startswith("✅") for it in self._turbo_queue):
             self._turbo_show_open_folder_btn()
+
+    def _turbo_add_row_ui(self, item: dict):
+        import customtkinter as ctk
+        from tkinter import filedialog
+        from pathlib import Path
+        from app.ui.app import SURF3, SURF2, BORDER, TEXT, MUTED, SUCCESS, DANGER, FONT_MU, _btn
+
+        row = ctk.CTkFrame(self._turbo_scroll, fg_color=SURF2, corner_radius=6)
+        row.pack(fill="x", pady=2, padx=2)
+        item["_row"] = row
+
+        fname = Path(item["audio"]).name
+        short = (fname[:22] + "…") if len(fname) > 24 else fname
+        ctk.CTkLabel(row, text=short, text_color=TEXT, font=FONT_MU,
+                     width=168, anchor="w").pack(side="left", padx=(6, 0))
+
+        def _pick_item_img(i=item):
+            path = filedialog.askopenfilename(
+                title="Pochette", filetypes=[("Images", "*.png *.jpg *.jpeg *.webp"), ("Tous", "*.*")])
+            if path:
+                i["image"] = path
+                try:
+                    i["_img_btn"].configure(text="✅", text_color=SUCCESS)
+                except Exception:
+                    pass
+
+        img_btn = _btn(row, "✅" if item.get("image") else "📂", _pick_item_img,
+                       small=True, width=44, height=28)
+        img_btn.pack(side="left", padx=4)
+        item["_img_btn"] = img_btn
+
+        ctk.CTkEntry(row, textvariable=item["artist_var"],
+                     fg_color=SURF3, border_color=BORDER, text_color=TEXT,
+                     font=FONT_MU, width=130, height=28).pack(side="left", padx=(0, 4))
+
+        ctk.CTkEntry(row, textvariable=item["title_var"],
+                     fg_color=SURF3, border_color=BORDER, text_color=TEXT,
+                     font=FONT_MU, width=160, height=28).pack(side="left", padx=(0, 4))
+
+        status_lbl = ctk.CTkLabel(row, text=item["status"], text_color=MUTED,
+                                   font=FONT_MU, width=86, anchor="w")
+        status_lbl.pack(side="left")
+        item["_status_lbl"] = status_lbl
+
+        def _remove(i=item, r=row):
+            if i in self._turbo_queue:
+                self._turbo_queue.remove(i)
+            try:
+                r.destroy()
+            except Exception:
+                pass
+
+        _btn(row, "✕", _remove, small=True, width=34, height=28, danger=True).pack(
+            side="right", padx=(0, 4))
 
     def _turbo_add_paths(self, paths: list[str]):
         import tkinter as tk

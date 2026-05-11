@@ -184,6 +184,13 @@ class EditorMixin:
         if "spectrum_color_high" in p: self._set_spectrum_color_band("high", p["spectrum_color_high"])
         if "spectrum_tricolor"   in p: self.spectrum_tricolor.set(p["spectrum_tricolor"])
         if "spectrum_reactive"   in p: self.spectrum_reactive.set(p["spectrum_reactive"])
+        if "bg_image_path" in p:
+            self.bg_image_path = p["bg_image_path"]
+            if hasattr(self, "_bg_image_label"):
+                self._bg_image_label.configure(text=self._bg_image_display_name())
+            if p["bg_image_path"] and self.bg_mode.get() != "custom":
+                self.bg_mode.set("custom")
+                self._refresh_gradient_visibility()
         self._schedule_persist()
         if not self.is_rendering:
             self._reload_visuals_only()
